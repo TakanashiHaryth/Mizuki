@@ -58,7 +58,7 @@ async function startBot(): Promise<void> {
     version,
     auth: state,
     logger: logger as any,
-    browser: ['Mizuki Bot', 'Chrome', '1.0.0'],
+    browser: ['Mizuki Bot', 'Chrome', config.bot.version],
     generateHighQualityLinkPreview: false,
     syncFullHistory: false,
   });

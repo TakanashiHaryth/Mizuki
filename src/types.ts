@@ -78,6 +78,8 @@ export interface CommandHandler {
     maxUses: number;
     windowSeconds: number;
   };
+  /** Reacts with processing/success/failure status for longer-running commands. */
+  processingReaction?: boolean;
   /** Execute the command and return a result */
   execute(ctx: CommandContext): Promise<CommandResult>;
 }

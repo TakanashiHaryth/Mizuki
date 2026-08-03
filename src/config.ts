@@ -7,6 +7,17 @@ dotenv.config();
 const DEFAULT_PERSONA =
   'You are Mizuki, a friendly and helpful WhatsApp community assistant. You are cheerful, concise, and slightly playful. Keep responses short and suitable for group chat.';
 
+function loadPackageVersion(): string {
+  try {
+    const packageJson = JSON.parse(
+      fs.readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8')
+    ) as { version?: string };
+    return packageJson.version || '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
 /**
  * Loads Mizuki's persona from a dedicated text/Markdown file.
  * BOT_PERSONA is retained as a fallback for deployments without that file.
@@ -46,6 +57,13 @@ export const config = {
     database: process.env.DB_NAME || 'mizuki_bot',
   },
 
+  /** Local MySQL backup/restore tooling */
+  dbBackup: {
+    directory: process.env.DB_BACKUP_DIR || 'backups',
+    retentionDays: parseInt(process.env.DB_BACKUP_RETENTION_DAYS || '30', 10),
+    mysqlBinDir: process.env.MYSQL_BIN_DIR || '',
+  },
+
   /** Bot behavior */
   bot: {
     /** AI system prompt / persona */
@@ -57,7 +75,7 @@ export const config = {
     /** Wake-word (case-insensitive, must appear at start of message) */
     wakeWord: 'mizuki',
     /** Version string shown in the infobot command */
-    version: '1.0.0',
+    version: loadPackageVersion(),
   },
 
   /** Bot owner details shown by the owner command */
@@ -88,8 +106,16 @@ export const config = {
     maxFileSizeMB: 16,
     maxVideoDurationSeconds: 10,
     stickerSize: 512,
+    maxAnimatedStickerSizeKB: parseInt(process.env.ANIMATED_STICKER_MAX_SIZE_KB || '500', 10),
     maxConcurrentJobs: parseInt(process.env.MEDIA_MAX_CONCURRENT || '2', 10),
     maxQueuedJobs: parseInt(process.env.MEDIA_MAX_QUEUE || '8', 10),
+  },
+
+  /** Metadata shown in WhatsApp sticker information */
+  stickerMetadata: {
+    packId: process.env.STICKER_PACK_ID || 'com.mizuki.bot',
+    packName: process.env.STICKER_PACK_NAME || 'Mizuki',
+    author: process.env.STICKER_AUTHOR || 'Mizuki Bot',
   },
 
   /** Maximum text sent to the AI in one request */

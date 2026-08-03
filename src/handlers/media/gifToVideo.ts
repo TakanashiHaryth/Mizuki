@@ -12,6 +12,7 @@ export const gifToVideoHandler: CommandHandler = {
   category: 'media',
   adminOnly: false,
   userRateLimit: config.rateLimits.media,
+  processingReaction: true,
 
   async execute(ctx: CommandContext): Promise<CommandResult> {
     const resolved = resolveVideoMedia(ctx.message, 'gif');

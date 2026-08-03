@@ -1,6 +1,7 @@
 node_modules/
 dist/
 auth_state/
+backups/
 .env
 .env.*
 !.env.example

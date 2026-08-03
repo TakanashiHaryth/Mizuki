@@ -36,7 +36,6 @@ import { infoMemberHandler } from '../handlers/general/infoMember';
 import { helpHandler } from '../handlers/general/help';
 import { pingHandler } from '../handlers/general/ping';
 import { ownerHandler } from '../handlers/general/owner';
-import { uptimeHandler } from '../handlers/general/uptime';
 import { privacyHandler } from '../handlers/general/privacy';
 import { flipCoinHandler } from '../handlers/minigame/flipCoin';
 import { diceThrowHandler } from '../handlers/minigame/diceThrow';
@@ -64,7 +63,6 @@ const allHandlers: CommandHandler[] = [
   helpHandler,
   pingHandler,
   ownerHandler,
-  uptimeHandler,
   privacyHandler,
   flipCoinHandler,
   diceThrowHandler,
@@ -81,6 +79,9 @@ const allHandlers: CommandHandler[] = [
 for (const handler of allHandlers) {
   handlers.set(handler.name, handler);
 }
+
+// Backwards-compatible alias; hidden from help because infobot already includes uptime.
+handlers.set('uptime', infoBotHandler);
 
 /** Exported for the help command to enumerate all commands */
 export { allHandlers };
@@ -174,6 +175,22 @@ async function sendReply(
   }
 }
 
+async function sendStatusReaction(
+  sock: WASocket,
+  jid: string,
+  msg: proto.IWebMessageInfo,
+  emoji: '⏳' | '✅' | '❌'
+): Promise<void> {
+  try {
+    await sock.sendMessage(jid, { react: { text: emoji, key: msg.key } });
+  } catch (err) {
+    logger.warn(
+      { err, messageId: msg.key.id, group: maskJid(jid), emoji },
+      'Could not send command status reaction'
+    );
+  }
+}
+
 /**
  * Main message handler. Called for every incoming message event.
  * This is the function you wire up to Baileys' `messages.upsert` event.
@@ -182,6 +199,7 @@ export async function handleMessage(
   sock: WASocket,
   msg: proto.IWebMessageInfo
 ): Promise<void> {
+  let processingReactionStarted = false;
   try {
     // Ignore non-group messages, status broadcasts, and bot's own messages
     const remoteJid = msg.key.remoteJid;
@@ -295,6 +313,11 @@ export async function handleMessage(
       'Executing command'
     );
 
+    if (handler.processingReaction) {
+      processingReactionStarted = true;
+      await sendStatusReaction(sock, groupJid, msg, '⏳');
+    }
+
     // Execute the handler
     let result: CommandResult;
     try {
@@ -318,6 +341,11 @@ export async function handleMessage(
     // Send the reply
     await sendReply(sock, groupJid, result.reply, msg);
 
+    if (handler.processingReaction) {
+      await sendStatusReaction(sock, groupJid, msg, result.success ? '✅' : '❌');
+      processingReactionStarted = false;
+    }
+
     // Log command usage (always, regardless of success)
     await logCommandUsage(groupId, userId, handler.name);
 
@@ -339,6 +367,10 @@ export async function handleMessage(
     try {
       const jid = msg.key.remoteJid;
       if (jid) {
+        if (processingReactionStarted) {
+          await sendStatusReaction(sock, jid, msg, '❌');
+          processingReactionStarted = false;
+        }
         await sendReply(sock, jid, '❌ Something went wrong. Please try again later.', msg);
       }
     } catch {

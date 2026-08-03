@@ -12,6 +12,7 @@ export const aiChatHandler: CommandHandler = {
   category: 'ai',
   adminOnly: false,
   userRateLimit: config.rateLimits.ai,
+  processingReaction: true,
 
   async execute(ctx: CommandContext): Promise<CommandResult> {
     const userMessage = ctx.args.join(' ').trim();

@@ -1,8 +1,8 @@
-/** Command: togif (video to WhatsApp GIF-style MP4). */
+/** Command: togif (video to animated WhatsApp sticker). */
 
 import { CommandHandler, CommandResult, CommandContext } from '../../types';
 import { downloadMediaMessage } from '@whiskeysockets/baileys';
-import { videoToGif, validateVideoSize } from '../../media/videoProcessor';
+import { videoToAnimatedSticker, validateVideoSize } from '../../media/videoProcessor';
 import { logger } from '../../services/logger';
 import { config } from '../../config';
 import { isDeclaredFileSizeAllowed, resolveVideoMedia } from '../../media/messageResolver';
@@ -12,12 +12,13 @@ export const videoToGifHandler: CommandHandler = {
   category: 'media',
   adminOnly: false,
   userRateLimit: config.rateLimits.media,
+  processingReaction: true,
 
   async execute(ctx: CommandContext): Promise<CommandResult> {
     const resolved = resolveVideoMedia(ctx.message, 'video');
     if (!resolved) {
       return {
-        reply: `⚠️ Hantar atau reply *video* dengan *${config.bot.prefix}togif*.`,
+        reply: `⚠️ Hantar atau reply *video* dengan *${config.bot.prefix}togif* untuk membuat animated sticker.`,
         success: false,
         error: 'No video found',
       };
@@ -36,30 +37,37 @@ export const videoToGifHandler: CommandHandler = {
     const maxBytes = config.media.maxFileSizeMB * 1024 * 1024;
     const declaredSize = resolved.videoMessage?.fileLength ?? resolved.documentMessage?.fileLength;
     if (!isDeclaredFileSizeAllowed(declaredSize, maxBytes)) {
-      return { reply: `⚠️ Video terlalu besar (maksimum ${config.media.maxFileSizeMB}MB).`, success: false };
+      return {
+        reply: `⚠️ Video terlalu besar (maksimum ${config.media.maxFileSizeMB}MB).`,
+        success: false,
+      };
     }
 
     try {
       const mediaMsg = { ...ctx.message, message: resolved.content };
       const buffer = await downloadMediaMessage(mediaMsg as any, 'buffer', {}) as Buffer;
       if (!validateVideoSize(buffer)) {
-        return { reply: `⚠️ Video terlalu besar (maksimum ${config.media.maxFileSizeMB}MB).`, success: false };
+        return {
+          reply: `⚠️ Video terlalu besar (maksimum ${config.media.maxFileSizeMB}MB).`,
+          success: false,
+        };
       }
 
-      const result = await videoToGif(buffer);
       return {
         reply: {
-          type: 'video',
-          buffer: result,
-          mimetype: 'video/mp4',
-          caption: '🎞️ Video ditukar kepada GIF',
-          gifPlayback: true,
+          type: 'sticker',
+          buffer: await videoToAnimatedSticker(buffer),
+          mimetype: 'image/webp',
         },
         success: true,
       };
     } catch (err) {
-      logger.error({ err }, 'VideoToGif failed');
-      return { reply: '❌ Video gagal ditukar. Pastikan ffmpeg dipasang.', success: false, error: String(err) };
+      logger.error({ err }, 'VideoToAnimatedSticker failed');
+      return {
+        reply: `❌ ${err instanceof Error ? err.message : 'Video gagal ditukar kepada animated sticker.'}`,
+        success: false,
+        error: String(err),
+      };
     }
   },
 };

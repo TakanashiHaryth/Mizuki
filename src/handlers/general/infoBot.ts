@@ -1,15 +1,22 @@
-/**
- * Command: infobot
- * Category: general
- * Shows bot version, uptime, and connection status.
- */
+/** Command: infobot — status, configuration and process uptime. */
 
 import { CommandHandler, CommandResult, CommandContext } from '../../types';
 import { config } from '../../config';
 import { isBotAdmin } from '../../services/permission';
 import { WASocket } from '@whiskeysockets/baileys';
 
-const startTime = Date.now();
+function formatUptime(totalSeconds: number): string {
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days} hari`);
+  if (hours > 0 || days > 0) parts.push(`${hours} jam`);
+  if (minutes > 0 || hours > 0 || days > 0) parts.push(`${minutes} minit`);
+  parts.push(`${seconds} saat`);
+  return parts.join(', ');
+}
 
 export const infoBotHandler: CommandHandler = {
   name: 'infobot',
@@ -19,22 +26,21 @@ export const infoBotHandler: CommandHandler = {
   async execute(ctx: CommandContext): Promise<CommandResult> {
     const sock = (ctx as any).sock as WASocket;
     const botIsAdmin = await isBotAdmin(sock, ctx.group.waGroupId);
-    const uptimeMs = Date.now() - startTime;
-    const hours = Math.floor(uptimeMs / 3600000);
-    const minutes = Math.floor((uptimeMs % 3600000) / 60000);
-    const seconds = Math.floor((uptimeMs % 60000) / 1000);
+    const uptime = formatUptime(Math.floor(process.uptime()));
 
-    const info = [
-      '🤖 *Mizuki Bot Info*',
-      '',
-      `📌 Version: ${config.bot.version}`,
-      `⏱️ Uptime: ${hours}h ${minutes}m ${seconds}s`,
-      `🧠 AI Model: ${config.gemini.model}`,
-      `💬 Memory Window: ${config.bot.memoryWindow} exchanges`,
-      `👑 Group Admin: ${botIsAdmin ? 'Yes' : 'No'}`,
-      `⚡ Status: Online`,
-    ].join('\n');
-
-    return { reply: info, success: true };
+    return {
+      reply: [
+        '🤖 *Maklumat Mizuki*',
+        '',
+        `📌 Versi: ${config.bot.version}`,
+        `⏱️ Uptime: ${uptime}`,
+        `🧠 Model AI: ${config.gemini.model}`,
+        `💬 Memori AI: ${config.bot.memoryWindow} pertukaran`,
+        `🔧 Prefix: ${config.bot.prefix}`,
+        `👑 Admin kumpulan: ${botIsAdmin ? 'Ya' : 'Tidak'}`,
+        '⚡ Status: Online',
+      ].join('\n'),
+      success: true,
+    };
   },
 };

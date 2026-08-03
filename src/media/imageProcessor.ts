@@ -6,6 +6,7 @@
 import sharp from 'sharp';
 import { logger } from '../services/logger';
 import { config } from '../config';
+import { addStickerMetadata } from './stickerMetadata';
 
 /**
  * Converts a WebP sticker buffer to PNG.
@@ -25,10 +26,11 @@ export async function stickerToImage(buffer: Buffer): Promise<Buffer> {
 export async function imageToSticker(buffer: Buffer): Promise<Buffer> {
   try {
     const size = config.media.stickerSize;
-    return await sharp(buffer)
+    const webp = await sharp(buffer)
       .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
       .webp({ quality: 80 })
       .toBuffer();
+    return await addStickerMetadata(webp);
   } catch (err) {
     logger.error({ err }, 'Failed to convert image to sticker');
     throw new Error('Failed to create sticker. Make sure the image is valid.');

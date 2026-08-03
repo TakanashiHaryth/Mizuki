@@ -12,6 +12,7 @@ export const imageToStickerHandler: CommandHandler = {
   category: 'media',
   adminOnly: false,
   userRateLimit: config.rateLimits.media,
+  processingReaction: true,
 
   async execute(ctx: CommandContext): Promise<CommandResult> {
     const resolved = resolveImageMedia(ctx.message);
