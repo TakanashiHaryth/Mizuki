@@ -1,79 +1,160 @@
-# Mizuki v1.2.0
+# Mizuki v1.2.0 — Release Notes
 
-Keluaran ini membawa personaliti berasingan bagi setiap group, command downloader
-social, fallback TikTok berlapis, respons AI yang lebih terkawal dan pemprosesan media
-yang lebih mudah dikonfigurasi.
+<div align="center">
 
-## Sorotan utama
+<img src="https://readme-typing-svg.herokuapp.com?font=Orbitron&size=30&duration=3500&pause=900&color=00BFFF&center=true&vCenter=true&width=720&lines=Mizuki+v1.2.0;Per-Group+Personality;Social+Media+Downloader;Smarter+AI+and+Media+Processing" alt="Mizuki v1.2.0"/>
 
-### Personaliti Mizuki bagi setiap group
+# 🌊 Mizuki v1.2.0
 
-Admin boleh melihat, mengubah atau reset sifat Mizuki terus dari WhatsApp:
+### 🧠 Group Personality · 📥 Social Downloader · ⚡ Smarter AI · 🎬 Better Media
+
+![Release](https://img.shields.io/badge/Release-v1.2.0-00BFFF?style=for-the-badge)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge\&logo=typescript\&logoColor=white)
+![Gemini](https://img.shields.io/badge/Gemini_AI-8E75B2?style=for-the-badge\&logo=googlegemini\&logoColor=white)
+
+</div>
+
+---
+
+## 🌌 What's New
+
+Mizuki `v1.2.0` introduces **per-group personalities**, social media download commands, layered TikTok fallbacks, improved Gemini AI controls, and more configurable media processing.
+
+```text
+╭──────────────────────────────────────────╮
+│             MIZUKI v1.2.0               │
+├──────────────────────────────────────────┤
+│  🧠 Per-Group Personality               │
+│  📥 Social Media Downloader             │
+│  ⚡ Improved AI Controls                │
+│  🎬 Configurable Media Processing       │
+│  🛡️ Downloader Safety Improvements      │
+╰──────────────────────────────────────────╯
+```
+
+---
+
+## 🧠 Per-Group Personality
+
+Group admins can now view, change, or reset Mizuki's personality directly from WhatsApp:
 
 ```text
 !m personality
-!m personality ceria, lembut dan suka bergurau
+!m personality cheerful, gentle and playful
 !m personality reset
 ```
 
-Personaliti disimpan dalam MySQL bagi setiap group. Fail `personality.md` dan tetapan
-persona dalam `.env` tidak lagi digunakan. Identiti default Mizuki kekal sebagai bot
-pembantu WhatsApp yang ceria, periang dan suka membantu admin.
+Each group's personality is stored in MySQL.
 
-### Downloader YouTube, TikTok, Instagram dan X
+`personality.md`, `PERSONALITY_FILE`, and `BOT_PERSONA` are no longer used.
 
-Command baharu:
+Mizuki's default identity remains a cheerful and helpful WhatsApp assistant designed to support group administrators.
+
+---
+
+## 📥 Social Media Downloader
+
+New commands:
 
 ```text
 !m yt <link>
 !m tt <link>
 !m ig <link>
 !m x <link>
-!m tt audio <link>
 ```
 
-Downloader video mengutamakan format sehingga 720p dan memilih format lain yang
-serasi jika format itu tidak tersedia. TikTok, Instagram dan X menyokong post yang
-mempunyai beberapa gambar atau video apabila platform membenarkannya.
-Pilihan `audio` memuat turun trek audio untuk dihantar sebagai mesej audio WhatsApp.
-
-TikTok menggunakan urutan berikut:
+Audio mode is also supported:
 
 ```text
-yt-dlp / gallery-dl → SocialKit → TikWM
+!m yt audio <link>
+!m tt audio <link>
+!m ig audio <link>
+!m x audio <link>
 ```
 
-Downloader lokal dicuba dahulu supaya kredit SocialKit tidak dibazirkan. SocialKit
-memerlukan `SOCIALKIT_API_KEY`, manakala fallback TikWM aktif secara default tanpa API
-key dan boleh dimatikan dengan `TIKWM_FALLBACK_ENABLED=false`.
+Supported platforms:
 
-### AI lebih cepat dan mesej ralat lebih jelas
+| Platform    | Support                          |
+| ----------- | -------------------------------- |
+| YouTube     | Video & Audio                    |
+| TikTok      | Video, Audio & Multi-Media Posts |
+| Instagram   | Video, Audio & Multi-Media Posts |
+| X / Twitter | Video & Audio                    |
 
-- Had output dan timeout Gemini boleh dikonfigurasi.
-- Thinking mode paling ringan digunakan pada model yang menyokongnya.
-- Rate limit, cancellation dan timeout mempunyai mesej WhatsApp yang berbeza.
+Video downloads prefer formats up to **720p**, with compatible fallback formats used when necessary.
 
-### Media dan animated sticker
+TikTok uses the following fallback chain:
 
-- Conversion media tidak mempunyai had penggunaan per-user.
-- Satu job diproses pada satu masa secara default melalui queue terbatas.
-- FPS animated sticker, compression WebP dan thread FFmpeg boleh dikonfigurasi.
-- Profil encoding menyesuaikan resolusi mengikut tempoh video untuk mengurangkan masa
-  conversion sambil mengekalkan gerakan yang lancar.
-- Reaction proses digunakan pada command media sahaja.
+```text
+yt-dlp / gallery-dl
+        ↓
+    SocialKit
+        ↓
+      TikWM
+```
 
-### Reliability dan keselamatan downloader
+Local downloaders are attempted first to avoid unnecessary SocialKit API usage.
 
-- Perlindungan single-instance menghalang dua proses menggunakan `auth_state/` yang sama.
-- Download social disusun satu demi satu dengan sela masa rawak.
-- Satu deadline dikongsi oleh downloader lokal dan semua fallback API.
-- URL provider memerlukan HTTPS, host dibenarkan dan tiada redirect.
-- Saiz setiap fail, jumlah carousel, tempoh media dan respons API semuanya dibatasi.
-- Parameter tracking dibuang sebelum link TikTok dihantar kepada provider.
+SocialKit requires:
 
-## Keperluan tambahan
+```env
+SOCIALKIT_API_KEY=your_api_key
+```
 
-Command social memerlukan:
+TikWM does not require an API key and is enabled by default.
+
+To disable it:
+
+```env
+TIKWM_FALLBACK_ENABLED=false
+```
+
+---
+
+## ⚡ Improved AI
+
+Gemini AI handling has been improved with:
+
+* Configurable output limits
+* Configurable request timeout
+* Lightweight thinking mode on supported models
+* Different messages for rate limits, cancellation, and timeout errors
+* More controlled AI responses
+
+---
+
+## 🎬 Media Processing
+
+Media processing is now more flexible:
+
+* No per-user limit for media conversions
+* One media job processed at a time by default
+* Bounded processing queue
+* Configurable animated sticker FPS
+* Configurable WebP compression
+* Configurable FFmpeg threads
+* Resolution automatically adjusted based on video duration
+* Processing reactions are now used only for media commands
+
+---
+
+## 🛡️ Downloader Reliability & Safety
+
+This release also improves downloader security and stability:
+
+* Single-instance protection prevents multiple processes from sharing the same `auth_state/`
+* Social downloads run sequentially with randomized delays
+* One shared deadline is used across local tools and fallback APIs
+* Provider URLs require HTTPS and approved hosts
+* Redirects are rejected
+* File sizes, carousel counts, media duration, and API responses are limited
+* Tracking parameters are removed before TikTok links are sent to providers
+
+---
+
+## 📋 Additional Requirements
+
+Social download commands require:
 
 ```powershell
 yt-dlp --version
@@ -81,13 +162,17 @@ gallery-dl --version
 ffmpeg -version
 ```
 
-SocialKit adalah pilihan. TikWM tidak memerlukan API key. Jika browser cookies
-digunakan untuk post yang memerlukan login, gunakan akaun khas dan hanya jalankan bot
-dalam group yang dipercayai.
+SocialKit is optional.
 
-## Cara menaik taraf
+TikWM works without an API key.
 
-Hentikan proses Mizuki lama, kemudian jalankan:
+If browser cookies are required for login-protected content, use a dedicated account and only enable this functionality in trusted groups.
+
+---
+
+## 🚀 Upgrade Guide
+
+Stop the previous Mizuki process, then run:
 
 ```powershell
 git pull
@@ -97,17 +182,66 @@ npm test
 npm run dev
 ```
 
-`npm run migrate` diperlukan untuk menambah kolum `groups.personality`. Migration ini
-selamat dijalankan semula kerana kolum yang sudah wujud akan diabaikan.
+`npm run migrate` is required because `v1.2.0` adds:
 
-Semak `.env.example` untuk tetapan AI, queue, FFmpeg dan downloader yang baharu. Jangan
-commit `.env`, `auth_state/`, cookies browser atau fail backup database.
+```text
+groups.personality
+```
 
-## Perubahan tingkah laku
+The migration is safe to run again because an existing column will be skipped.
 
-- Personaliti kini dikawal oleh admin bagi setiap group dan bukan melalui fail Markdown.
-- `MEDIA_RATE_LIMIT_*`, `PERSONALITY_FILE` dan `BOT_PERSONA` tidak lagi digunakan.
-- Semua command memerlukan ruang selepas prefix, contohnya `!m help`; bentuk rapat
-  seperti `!mhelp` tidak lagi dianggap sebagai command.
-- `!m uptime` masih berfungsi sebagai alias tersembunyi untuk `!m infobot`.
-- `!m instagram` masih berfungsi sebagai alias tersembunyi untuk `!m ig`.
+Also review `.env.example` for new AI, downloader, FFmpeg, and media queue configuration options.
+
+Never commit:
+
+```text
+.env
+auth_state/
+browser cookies
+database backups
+```
+
+---
+
+## 🔄 Behavior Changes
+
+* Personality is now configured per group by administrators.
+* Markdown-based personality configuration is no longer used.
+* `MEDIA_RATE_LIMIT_*`, `PERSONALITY_FILE`, and `BOT_PERSONA` are deprecated.
+* Commands now require a space after the prefix.
+
+Correct:
+
+```text
+!m help
+!m ping
+!m yt <link>
+```
+
+No longer recognized:
+
+```text
+!mhelp
+!mping
+```
+
+Backward-compatible aliases remain available:
+
+```text
+!m uptime    → !m infobot
+!m instagram → !m ig
+```
+
+---
+
+<div align="center">
+
+## 🌙 Mizuki v1.2.0
+
+> **More personality. More media. Better control.**
+
+<img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=12,20,24&height=110&section=footer" width="100%" alt="Footer"/>
+
+**Admin · Automate · Download · Communicate**
+
+</div>
