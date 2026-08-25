@@ -1,6 +1,6 @@
 {
   "name": "mizuki-bot",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Mizuki — WhatsApp community bot with AI, admin, media, and minigame commands",
   "main": "dist/index.js",
   "scripts": {

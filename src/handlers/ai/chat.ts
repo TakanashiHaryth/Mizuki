@@ -1,25 +1,26 @@
 /** Freeform Gemini chat with per-user, per-group rolling memory. */
 
 import { CommandHandler, CommandResult, CommandContext } from '../../types';
-import { geminiAdapter, LLMRateLimitError } from '../../llm/geminiAdapter';
+import { geminiAdapter, LLMRateLimitError, LLMTimeoutError } from '../../llm/geminiAdapter';
 import { loadMemory, addMemory, pruneMemory } from '../../data/repositories/memoryRepo';
 import { isMemoryOptedOut } from '../../data/repositories/userRepo';
 import { config } from '../../config';
 import { logger } from '../../services/logger';
+import { getGroupPersonality } from '../../data/repositories/groupRepo';
+import { buildMizukiSystemPrompt } from '../../services/personality';
 
 export const aiChatHandler: CommandHandler = {
   name: 'ai',
   category: 'ai',
   adminOnly: false,
   userRateLimit: config.rateLimits.ai,
-  processingReaction: true,
 
   async execute(ctx: CommandContext): Promise<CommandResult> {
     const userMessage = ctx.args.join(' ').trim();
 
     if (!userMessage) {
       return {
-        reply: `💬 Hai! Tanya Mizuki apa-apa dengan *Mizuki, [soalan]* atau *${config.bot.prefix}ai [soalan]*.`,
+        reply: `💬 Hai! Tanya Mizuki apa-apa dengan *Mizuki, [soalan]* atau *${config.bot.prefix} ai [soalan]*.`,
         success: true,
       };
     }
@@ -41,7 +42,10 @@ export const aiChatHandler: CommandHandler = {
     }
 
     try {
-      const optedOut = await isMemoryOptedOut(ctx.sender.userId);
+      const [optedOut, customPersonality] = await Promise.all([
+        isMemoryOptedOut(ctx.sender.userId),
+        getGroupPersonality(ctx.group.groupId),
+      ]);
       let history: { role: 'user' | 'assistant'; content: string }[] = [];
 
       if (!optedOut) {
@@ -50,7 +54,7 @@ export const aiChatHandler: CommandHandler = {
       }
 
       const response = await geminiAdapter.chat({
-        systemPrompt: config.bot.persona,
+        systemPrompt: buildMizukiSystemPrompt(customPersonality),
         history,
         userMessage,
       });
@@ -66,6 +70,14 @@ export const aiChatHandler: CommandHandler = {
       if (err instanceof LLMRateLimitError) {
         return {
           reply: 'Mizuki agak sibuk sekarang 😅 Cuba lagi sebentar nanti.',
+          success: false,
+          error: err.message,
+        };
+      }
+
+      if (err instanceof LLMTimeoutError) {
+        return {
+          reply: 'Gemini mengambil masa terlalu lama untuk menjawab. Cuba sekali lagi sebentar nanti.',
           success: false,
           error: err.message,
         };

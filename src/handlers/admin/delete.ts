@@ -24,7 +24,7 @@ export const deleteHandler: CommandHandler = {
 
     if (!messageId) {
       return {
-        reply: `⚠️ Reply pada mesej yang mahu dipadam dengan *${config.bot.prefix}delete*.`,
+        reply: `⚠️ Reply pada mesej yang mahu dipadam dengan *${config.bot.prefix} delete*.`,
         success: false,
         error: 'No quoted message found',
       };

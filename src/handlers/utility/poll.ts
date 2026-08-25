@@ -3,7 +3,7 @@
  * Category: utility
  * Creates a native single-choice WhatsApp poll.
  *
- * Usage: <prefix>poll Question | Option 1 | Option 2
+ * Usage: <prefix> poll Question | Option 1 | Option 2
  */
 
 import { CommandHandler, CommandResult, CommandContext } from '../../types';
@@ -23,9 +23,9 @@ export const pollHandler: CommandHandler = {
     const prefix = config.bot.prefix;
     const usage =
       '📊 *Cara membuat poll*\n\n' +
-      `\`${prefix}poll Soalan | Pilihan 1 | Pilihan 2\`\n\n` +
+      `\`${prefix} poll Soalan | Pilihan 1 | Pilihan 2\`\n\n` +
       'Contoh:\n' +
-      `\`${prefix}poll Nak makan mana? | Kedai mamak | Nasi kandar | Tomyam\``;
+      `\`${prefix} poll Nak makan mana? | Kedai mamak | Nasi kandar | Tomyam\``;
 
     if (!input) {
       return { reply: usage, success: false, error: 'Missing poll content' };

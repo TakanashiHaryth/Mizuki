@@ -11,14 +11,13 @@ export const gifToVideoHandler: CommandHandler = {
   name: 'tovideo',
   category: 'media',
   adminOnly: false,
-  userRateLimit: config.rateLimits.media,
   processingReaction: true,
 
   async execute(ctx: CommandContext): Promise<CommandResult> {
     const resolved = resolveVideoMedia(ctx.message, 'gif');
     if (!resolved) {
       return {
-        reply: `⚠️ Hantar atau reply *GIF* dengan *${config.bot.prefix}tovideo*.`,
+        reply: `⚠️ Hantar atau reply *GIF* dengan *${config.bot.prefix} tovideo*.`,
         success: false,
         error: 'No GIF found',
       };

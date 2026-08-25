@@ -11,14 +11,13 @@ export const stickerToImageHandler: CommandHandler = {
   name: 'img',
   category: 'media',
   adminOnly: false,
-  userRateLimit: config.rateLimits.media,
   processingReaction: true,
 
   async execute(ctx: CommandContext): Promise<CommandResult> {
     const resolved = resolveStickerMedia(ctx.message);
     if (!resolved) {
       return {
-        reply: `⚠️ Hantar atau reply *sticker* dengan *${config.bot.prefix}img*.`,
+        reply: `⚠️ Hantar atau reply *sticker* dengan *${config.bot.prefix} img*.`,
         success: false,
         error: 'No sticker found',
       };

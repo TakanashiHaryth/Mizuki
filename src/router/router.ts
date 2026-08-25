@@ -9,7 +9,7 @@
 
 import { WASocket, proto, normalizeMessageContent } from '@whiskeysockets/baileys';
 import { parseMessage } from './parser';
-import { CommandHandler, CommandContext, CommandResult, MediaReply, PollReply, TextReply } from '../types';
+import { CommandHandler, CommandContext, CommandResult, CommandReply } from '../types';
 import { isAdmin, isBotAdmin } from '../services/permission';
 import {
   checkCooldown,
@@ -30,6 +30,7 @@ import { promoteHandler } from '../handlers/admin/promote';
 import { demoteHandler } from '../handlers/admin/demote';
 import { tagAllHandler } from '../handlers/admin/tagAll';
 import { deleteHandler } from '../handlers/admin/delete';
+import { personalityHandler } from '../handlers/admin/personality';
 import { infoBotHandler } from '../handlers/general/infoBot';
 import { infoGroupHandler } from '../handlers/general/infoGroup';
 import { infoMemberHandler } from '../handlers/general/infoMember';
@@ -43,6 +44,10 @@ import { stickerToImageHandler } from '../handlers/media/stickerToImage';
 import { imageToStickerHandler } from '../handlers/media/imageToSticker';
 import { gifToVideoHandler } from '../handlers/media/gifToVideo';
 import { videoToGifHandler } from '../handlers/media/videoToGif';
+import { youtubeDownloadHandler } from '../handlers/media/youtubeDownloader';
+import { tiktokDownloadHandler } from '../handlers/media/tiktokDownloader';
+import { instagramDownloadHandler } from '../handlers/media/instagramDownloader';
+import { xDownloadHandler } from '../handlers/media/twitterDownloader';
 import { aiChatHandler } from '../handlers/ai/chat';
 import { forgetMeHandler } from '../handlers/ai/forgetMe';
 import { pollHandler } from '../handlers/utility/poll';
@@ -57,6 +62,7 @@ const allHandlers: CommandHandler[] = [
   demoteHandler,
   tagAllHandler,
   deleteHandler,
+  personalityHandler,
   infoBotHandler,
   infoGroupHandler,
   infoMemberHandler,
@@ -70,6 +76,10 @@ const allHandlers: CommandHandler[] = [
   imageToStickerHandler,
   gifToVideoHandler,
   videoToGifHandler,
+  youtubeDownloadHandler,
+  tiktokDownloadHandler,
+  instagramDownloadHandler,
+  xDownloadHandler,
   aiChatHandler,
   forgetMeHandler,
   pollHandler,
@@ -82,6 +92,7 @@ for (const handler of allHandlers) {
 
 // Backwards-compatible alias; hidden from help because infobot already includes uptime.
 handlers.set('uptime', infoBotHandler);
+handlers.set('instagram', instagramDownloadHandler);
 
 /** Exported for the help command to enumerate all commands */
 export { allHandlers };
@@ -109,7 +120,7 @@ function extractMessageText(msg: proto.IWebMessageInfo): string {
 async function sendReply(
   sock: WASocket,
   jid: string,
-  reply: string | TextReply | MediaReply | PollReply,
+  reply: CommandReply,
   quotedMsg?: proto.IWebMessageInfo
 ): Promise<void> {
   if (typeof reply === 'string' && reply.trim().length === 0) return;
@@ -148,6 +159,13 @@ async function sendReply(
             mimetype: reply.mimetype as any,
             gifPlayback: reply.gifPlayback,
           },
+          { quoted: quotedMsg }
+        );
+        break;
+      case 'audio':
+        await sock.sendMessage(
+          jid,
+          { audio: reply.buffer, mimetype: reply.mimetype as any, ptt: reply.ptt ?? false },
           { quoted: quotedMsg }
         );
         break;
@@ -229,7 +247,7 @@ export async function handleMessage(
       await sendReply(
         sock,
         groupJid,
-        `❌ Unknown command *${parsed.command}*. Type *${config.bot.prefix}help* to see available commands.`,
+        `❌ Unknown command *${parsed.command}*. Type *${config.bot.prefix} help* to see available commands.`,
         msg
       );
       return;
@@ -244,7 +262,7 @@ export async function handleMessage(
       }
 
       // Also check if the bot itself is admin (needed for kick/promote/demote)
-      const botIsAdmin = await isBotAdmin(sock, groupJid);
+      const botIsAdmin = handler.requiresBotAdmin === false || await isBotAdmin(sock, groupJid);
       if (!botIsAdmin) {
         await sendReply(
           sock,
@@ -277,7 +295,7 @@ export async function handleMessage(
       }
     }
 
-    // Persistent per-user protection for AI and media processing.
+    // Persistent per-user protection for commands that explicitly opt in (AI).
     if (handler.userRateLimit) {
       const limit = await consumeUserRateLimit(
         userId,
@@ -313,7 +331,9 @@ export async function handleMessage(
       'Executing command'
     );
 
-    if (handler.processingReaction) {
+    // Status reactions are reserved for media conversion commands only.
+    const usesProcessingReaction = handler.category === 'media' && handler.processingReaction === true;
+    if (usesProcessingReaction) {
       processingReactionStarted = true;
       await sendStatusReaction(sock, groupJid, msg, '⏳');
     }
@@ -321,7 +341,7 @@ export async function handleMessage(
     // Execute the handler
     let result: CommandResult;
     try {
-      result = handler.category === 'media'
+      result = handler.category === 'media' && config.media.queueEnabled
         ? await mediaQueue.run(() => handler.execute(ctx))
         : await handler.execute(ctx);
     } catch (err) {
@@ -338,10 +358,13 @@ export async function handleMessage(
       await recordUsage(groupId, handler.name);
     }
 
-    // Send the reply
-    await sendReply(sock, groupJid, result.reply, msg);
+    // Carousel commands may return several media items from one post.
+    const replies = Array.isArray(result.reply) ? result.reply : [result.reply];
+    for (const reply of replies) {
+      await sendReply(sock, groupJid, reply, msg);
+    }
 
-    if (handler.processingReaction) {
+    if (usesProcessingReaction) {
       await sendStatusReaction(sock, groupJid, msg, result.success ? '✅' : '❌');
       processingReactionStarted = false;
     }

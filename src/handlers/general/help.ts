@@ -48,13 +48,13 @@ export const helpHandler: CommandHandler = {
 
       for (const h of handlers) {
         const adminTag = h.adminOnly ? ' 🔐' : '';
-        text += `  • ${config.bot.prefix}${h.name}${adminTag}\n`;
+        text += `  • ${config.bot.prefix} ${h.name}${adminTag}\n`;
       }
     }
 
     text += '\n_🔐 = Admin only_';
     text += '\n_Say "Mizuki, [your message]" for AI chat!_';
-    text += `\n_Privasi & data: ${config.bot.prefix}privacy_`;
+    text += `\n_Privasi & data: ${config.bot.prefix} privacy_`;
 
     return { reply: text, success: true };
   },

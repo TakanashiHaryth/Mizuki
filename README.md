@@ -28,15 +28,15 @@
   <img src="https://img.shields.io/badge/Language-English%20%7C%20Malay-7E22CE?style=flat-square" alt="Language Support"/>
   <img src="https://img.shields.io/badge/Status-Active_Development-22C55E?style=flat-square" alt="Development Status"/>
   <img src="https://img.shields.io/badge/Runtime-Node.js_20+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js Version"/>
-  <img src="https://img.shields.io/badge/Release-v1.1.0-00BFFF?style=flat-square" alt="Mizuki v1.1.0"/>
+  <img src="https://img.shields.io/badge/Release-v1.2.0-00BFFF?style=flat-square" alt="Mizuki v1.2.0"/>
 </p>
 
 </div>
 
 ---
 
-> Current release: **v1.1.0** — see [CHANGELOG.md](CHANGELOG.md) and
-> [release notes](RELEASE_NOTES_v1.1.0.md) for details.
+> Current release: **v1.2.0** — see [CHANGELOG.md](CHANGELOG.md) and
+> [release notes](RELEASE_NOTES_v1.2.0.md) for details.
 
 ## 🌌 About Mizuki
 
@@ -90,7 +90,7 @@ Communicate with Mizuki using natural language.
 * Group-specific context
 * Rolling conversation memory
 * Memory deletion and opt-out
-* Customizable personality
+* Per-group personality controlled by admins
 
 </td>
 </tr>
@@ -140,66 +140,74 @@ The examples below use:
 BOT_PREFIX=!m
 ```
 
+A space between the prefix and command is required, for example `!m help`.
+
 ### 🛡️ Admin Commands
 
 | Command     | Description                                         |
 | ----------- | --------------------------------------------------- |
-| `!mkick`    | Remove a mentioned or replied member from the group |
-| `!mpromote` | Promote a member to group administrator             |
-| `!mdemote`  | Remove administrator privileges from a member       |
-| `!mtagall`  | Mention all group members                           |
-| `!mdelete`  | Delete a replied message                            |
+| `!m kick`    | Remove a mentioned or replied member from the group |
+| `!m promote` | Promote a member to group administrator             |
+| `!m demote`  | Remove administrator privileges from a member       |
+| `!m tagall`  | Mention all group members                           |
+| `!m delete`  | Delete a replied message                            |
+| `!m personality [sifat]` | View or change Mizuki's personality for the group |
 
 ### 🌐 General Commands
 
 | Command        | Description                                 |
 | -------------- | ------------------------------------------- |
-| `!mhelp`       | Display the command menu                    |
-| `!mping`       | Check the bot response time                 |
-| `!minfobot`    | Display Mizuki information and uptime       |
-| `!minfogroup`  | Display information about the current group |
-| `!minfomember` | Display information about a group member    |
-| `!mowner`      | Display information about the bot owner     |
-| `!mprivacy`    | Display the AI memory and privacy policy    |
+| `!m help`       | Display the command menu                    |
+| `!m ping`       | Check the bot response time                 |
+| `!m infobot`    | Display Mizuki information and uptime       |
+| `!m infogroup`  | Display information about the current group |
+| `!m infomember` | Display information about a group member    |
+| `!m owner`      | Display information about the bot owner     |
+| `!m privacy`    | Display the AI memory and privacy policy    |
 
 ### 🧠 AI Commands
 
 | Command             | Description                           |
 | ------------------- | ------------------------------------- |
 | `Mizuki, [message]` | Talk directly to Mizuki               |
-| `!mai [message]`    | Send a prompt to Gemini AI            |
-| `!mforgetme`        | Delete personal AI memory and opt out |
+| `!m ai [message]`    | Send a prompt to Gemini AI            |
+| `!m forgetme`        | Delete personal AI memory and opt out |
 
 ### 📊 Utility Commands
 
 | Command                                   | Description            |
 | ----------------------------------------- | ---------------------- |
-| `!mpoll Question \| Option 1 \| Option 2` | Create a WhatsApp poll |
+| `!m poll Question \| Option 1 \| Option 2` | Create a WhatsApp poll |
 
 Example:
 
 ```text
-!mpoll Which game should we play? | MLBB | Genshin | HSR
+!m poll Which game should we play? | MLBB | Genshin | HSR
 ```
 
 ### 🎮 Minigame Commands
 
 | Command      | Description         |
 | ------------ | ------------------- |
-| `!mflipcoin` | Flip a virtual coin |
-| `!mdice`     | Roll a virtual dice |
+| `!m flipcoin` | Flip a virtual coin |
+| `!m dice`     | Roll a virtual dice |
 
 ### 🎬 Media Commands
 
 | Command     | Description                              |
 | ----------- | ---------------------------------------- |
-| `!msticker` | Convert an image into a sticker          |
-| `!mimg`     | Convert a sticker into an image          |
-| `!mtovideo` | Convert a GIF into an MP4 video          |
-| `!mtogif`   | Convert a video into an animated sticker |
+| `!m sticker` | Convert an image into a sticker          |
+| `!m img`     | Convert a sticker into an image          |
+| `!m tovideo` | Convert a GIF into an MP4 video          |
+| `!m togif`   | Convert a video into an animated sticker |
+| `!m yt <link>` | Download a public YouTube video (prefers up to 720p, with a compatible fallback) |
+| `!m tt <link>` | Download a public TikTok HD video or every picture from a photo post |
+| `!m ig <link>` | Download an Instagram video or multi-picture post |
+| `!m x <link>` | Download a public X/Twitter video (prefers up to 720p, with a compatible fallback) |
+| `!m yt audio <link>` | Download MP3 audio; `audio` also works with tt/ig/x |
 
-`!muptime` remains available as a backwards-compatible alias for `!minfobot`.
-AI and media commands react with `⏳` while processing, then `✅` or `❌`.
+`!m uptime` remains available as a backwards-compatible alias for `!m infobot`.
+Media commands react with `⏳` while processing, then `✅` or `❌`.
 
 ---
 
@@ -246,6 +254,8 @@ Before installing Mizuki, make sure the system has:
 * npm
 * MySQL 8 or MariaDB
 * ffmpeg
+* yt-dlp
+* gallery-dl
 * Git
 * A Gemini API key
 * A dedicated WhatsApp number
@@ -268,6 +278,56 @@ ffmpeg -version
 ```
 
 After installing ffmpeg using `winget`, close and reopen PowerShell before running the version command.
+
+### Install and check yt-dlp
+
+```powershell
+winget install --exact --id yt-dlp.yt-dlp
+yt-dlp --version
+```
+
+Close and reopen PowerShell after installation if `yt-dlp` is not immediately recognized.
+
+### Install and check gallery-dl
+
+```powershell
+winget install --exact --id mikf.gallery-dl
+gallery-dl --version
+```
+
+`gallery-dl` handles TikTok/Instagram/X posts containing several pictures or videos.
+Some posts are hidden behind platform login. To explicitly allow a dedicated
+browser session, set `GALLERY_DL_COOKIES_BROWSER=opera` (or `chrome`/`edge`/`firefox`)
+in `.env`. Do not use an important personal account for automated downloads.
+Any group member who can use a social command can request media visible to that
+browser session, so keep this setting blank unless the bot runs in a trusted group.
+On Windows, close the selected browser fully if Mizuki reports that its cookies
+database is locked, then retry the command.
+
+### Optional free TikTok API fallbacks
+
+TikTok may reject both local downloaders with a JavaScript challenge and HTTP
+403. Mizuki uses this order for `!m tt`: `yt-dlp/gallery-dl → SocialKit → TikWM`.
+Local tools stay first so successful downloads do not consume API credits.
+Create a free SocialKit API key at https://www.socialkit.dev/ and add it to `.env`:
+
+```env
+SOCIALKIT_API_KEY=your_socialkit_key_here
+TIKWM_FALLBACK_ENABLED=true
+```
+
+SocialKit offers a free tier at the time of writing, but its limits and pricing may
+change; check the provider dashboard before relying on it. Mizuki requests 720p MP4
+(or MP3 for `!m tt audio`), validates the temporary provider URL, and still enforces
+its configured media size and duration limits. The provider receives the public
+TikTok link submitted by the WhatsApp user. Keep this key private and never commit
+`.env`. Successful fallback requests from group members may consume the shared
+provider quota; leave `SOCIALKIT_API_KEY` blank if you do not want to use a
+third-party service. If SocialKit is unavailable or its quota is exhausted,
+TikWM is tried automatically without an API key. Set `TIKWM_FALLBACK_ENABLED=false`
+to disable it. Both providers receive the public TikTok link submitted by the user.
+`DOWNLOAD_TIMEOUT_MS` is one overall deadline shared by local tools and both APIs,
+so a failed provider cannot restart the full timeout for the next fallback.
 
 ---
 
@@ -327,24 +387,7 @@ STICKER_AUTHOR=Mizuki Bot
 
 Keep `.env.example` inside the repository because it acts as a safe configuration template for other developers.
 
-### 4. Configure Mizuki's Personality
-
-Edit:
-
-```text
-personality.md
-```
-
-This file controls Mizuki's:
-
-* Personality
-* Communication style
-* Preferred language
-* Behavioral guidelines
-* Response format
-* Character identity
-
-### 5. Create the Database
+### 4. Create the Database
 
 Log in to MySQL and run:
 
@@ -365,23 +408,38 @@ FLUSH PRIVILEGES;
 
 Do not use the MySQL `root` account for production hosting.
 
-### 6. Run Database Migrations
+### 5. Run Database Migrations
 
 ```powershell
 npm run migrate
 ```
 
-### 7. Run Tests
+### 6. Run Tests
 
 ```powershell
 npm test
 ```
 
-### 8. Start Mizuki
+### 7. Start Mizuki
 
 ```powershell
 npm run dev
 ```
+
+### 8. Configure Mizuki's Personality
+
+Personality is stored in MySQL for each group and can only be changed by a
+group admin:
+
+```text
+!m personality
+!m personality ceria, lembut dan suka bergurau
+!m personality reset
+```
+
+The built-in default identifies Mizuki as a cheerful, helpful WhatsApp
+assistant for group admins. No personality setting is required in `.env` and no
+`personality.md` file is used.
 
 Scan the QR code using:
 
@@ -397,6 +455,10 @@ The authentication session is stored inside:
 ```text
 auth_state/
 ```
+
+Run only one Mizuki process for each `auth_state/` directory. Mizuki creates an
+ignored `.mizuki.lock` file and blocks duplicate startup automatically to avoid
+WhatsApp `440 conflict / replaced` reconnect loops.
 
 The QR code does not need to be scanned again as long as:
 
@@ -455,7 +517,6 @@ Mizuki/
 ├── .env.example            # Safe environment template
 ├── .gitignore
 ├── CHANGELOG.md
-├── personality.md          # Mizuki personality configuration
 ├── SECURITY.md             # Security checklist
 ├── package.json
 ├── tsconfig.json
@@ -542,25 +603,51 @@ AI memory is:
 Users can inspect the privacy policy using:
 
 ```text
-!mprivacy
+!m privacy
 ```
 
 Users can delete their memory and opt out using:
 
 ```text
-!mforgetme
+!m forgetme
 ```
 
-### Rate Limiting
+### Rate Limiting and Media Queue
 
-AI and media commands use per-user limits to reduce:
+AI commands use per-user limits to reduce:
 
 * Spam
 * API abuse
 * Excessive Gemini API usage
-* High CPU usage
-* High memory usage
-* Repeated media processing
+
+Media conversion commands have no per-user usage limit. By default, Mizuki
+processes one conversion at a time while later requests wait in a bounded queue.
+This resource guard can be configured or disabled in `.env`:
+
+```env
+# Smooth animated stickers (8-30 FPS)
+ANIMATED_STICKER_FPS=30
+ANIMATED_STICKER_COMPRESSION_LEVEL=4
+
+# Resource controls
+MEDIA_QUEUE_ENABLED=true
+MEDIA_MAX_CONCURRENT=1
+MEDIA_MAX_QUEUE=8
+FFMPEG_THREADS=0
+
+# Random pacing between social downloads
+DOWNLOAD_DELAY_MIN_SECONDS=5
+DOWNLOAD_DELAY_MAX_SECONDS=10
+```
+
+The default `ANIMATED_STICKER_FPS=30` gives the smoothest motion; use `24` for
+a size/quality balance. Set `MEDIA_QUEUE_ENABLED=false` to bypass the queue.
+`FFMPEG_THREADS=0` allows FFmpeg to choose all available CPU threads; use a
+positive number such as `2` to reduce CPU use. Disabling the queue can cause
+several conversions to consume CPU and memory simultaneously. Social downloads
+remain serial and wait a random 5-10 seconds after the previous job before
+starting, even if the conversion queue is disabled. Set both download delay
+values to `0` to disable only the pause.
 
 ### Media Validation
 
@@ -570,7 +657,7 @@ Media files are checked:
 2. Again after the download is complete
 3. Before being processed by sharp or ffmpeg
 
-ffmpeg and sharp tasks are processed through a queue with limited concurrency.
+When enabled, ffmpeg and sharp tasks are processed through the configured queue.
 
 ### Log Retention
 

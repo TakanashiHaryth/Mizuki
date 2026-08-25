@@ -31,7 +31,7 @@ export const demoteHandler: CommandHandler = {
 
     if (!targetJid) {
       return {
-        reply: `⚠️ Please mention or reply to the admin you want to demote.\nUsage: *${config.bot.prefix}demote @member*`,
+        reply: `⚠️ Please mention or reply to the admin you want to demote.\nUsage: *${config.bot.prefix} demote @member*`,
         success: false,
         error: 'No target specified',
       };

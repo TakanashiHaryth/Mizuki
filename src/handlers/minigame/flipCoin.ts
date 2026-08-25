@@ -14,7 +14,7 @@ export const flipCoinHandler: CommandHandler = {
 
   async execute(ctx: CommandContext): Promise<CommandResult> {
     const result = crypto.randomInt(2) === 0 ? 'Heads' : 'Tails';
-    const emoji = result === 'Heads' ? '🪙' : '💰';
+    const emoji = result === 'Heads' ? '🐴' : '🐎';
 
     return {
       reply: `${emoji} *${result}!*`,

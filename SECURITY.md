@@ -235,13 +235,13 @@ Mizuki's AI memory should be:
 Users can view the privacy policy with:
 
 ```text
-!mprivacy
+!m privacy
 ```
 
 Users can delete their memory and opt out with:
 
 ```text
-!mforgetme
+!m forgetme
 ```
 
 ---

@@ -21,6 +21,7 @@ import { upsertGroup, upsertGroupMember, removeGroupMember } from './data/reposi
 import { logger, maskJid } from './services/logger';
 import { config } from './config';
 import { pruneOldLogs } from './data/repositories/logRepo';
+import { botInstanceLock } from './services/singleInstance';
 
 /** The active Baileys socket */
 let sock: WASocket;
@@ -165,8 +166,18 @@ async function shutdown(signal: string): Promise<void> {
 
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('exit', () => {
+  try { botInstanceLock.release(); } catch {}
+});
 
 // ─── Start! ───
+
+try {
+  botInstanceLock.acquire();
+} catch (err) {
+  logger.error({ err }, 'Mizuki startup blocked to protect the WhatsApp session');
+  process.exit(1);
+}
 
 startBot().catch((err) => {
   logger.error({ err }, 'Fatal error during startup');

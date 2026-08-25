@@ -23,7 +23,7 @@ dan tidak dimasukkan ke GitHub. Restore membuat backup keselamatan terlebih dahu
 Reply video maksimum 10 saat dengan:
 
 ```text
-!mtogif
+!m togif
 ```
 
 Mizuki kini menghasilkan animated WebP sticker sebenar, bukan video MP4 dalam mod GIF.
@@ -49,7 +49,7 @@ Command AI dan media memberi reaction:
 
 ### Infobot lebih lengkap
 
-`!minfobot` kini merangkumi uptime. `!muptime` masih berfungsi sebagai alias supaya
+`!m infobot` kini merangkumi uptime. `!m uptime` masih berfungsi sebagai alias supaya
 pengguna lama tidak terjejas.
 
 ## Cara menaik taraf

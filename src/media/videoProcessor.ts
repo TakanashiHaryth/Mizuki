@@ -49,18 +49,33 @@ export async function gifToVideo(buffer: Buffer): Promise<Buffer> {
 
 interface StickerProfile {
   canvas: number;
-  fps: number;
   quality: number;
 }
 
 const ANIMATED_STICKER_PROFILES: StickerProfile[] = [
-  { canvas: 512, fps: 12, quality: 65 },
-  { canvas: 480, fps: 10, quality: 55 },
-  { canvas: 384, fps: 8, quality: 45 },
+  { canvas: 512, quality: 65 },
+  { canvas: 448, quality: 58 },
+  { canvas: 384, quality: 50 },
+  { canvas: 320, quality: 42 },
+  { canvas: 288, quality: 36 },
+  { canvas: 256, quality: 30 },
+  { canvas: 224, quality: 26 },
 ];
 
+function profilesForDuration(durationSeconds?: number): StickerProfile[] {
+  if (!durationSeconds || durationSeconds <= 4) return ANIMATED_STICKER_PROFILES;
+  const usesMaximumFps = config.media.animatedStickerFps >= 30;
+  if (durationSeconds <= 7) {
+    return ANIMATED_STICKER_PROFILES.slice(usesMaximumFps ? 3 : 2);
+  }
+  return ANIMATED_STICKER_PROFILES.slice(usesMaximumFps ? 5 : 3);
+}
+
 /** Converts a short video into a looping animated WebP WhatsApp sticker. */
-export async function videoToAnimatedSticker(buffer: Buffer): Promise<Buffer> {
+export async function videoToAnimatedSticker(
+  buffer: Buffer,
+  durationSeconds?: number
+): Promise<Buffer> {
   const inputPath = tempFile('mp4');
   const outputPath = tempFile('webp');
   const maxBytes = config.media.maxAnimatedStickerSizeKB * 1024;
@@ -68,12 +83,14 @@ export async function videoToAnimatedSticker(buffer: Buffer): Promise<Buffer> {
   try {
     fs.writeFileSync(inputPath, buffer);
 
-    for (const profile of ANIMATED_STICKER_PROFILES) {
+    // Longer videos start with a lighter profile instead of wasting time on an
+    // output that is very likely to exceed WhatsApp's sticker size limit.
+    for (const profile of profilesForDuration(durationSeconds)) {
       try { fs.unlinkSync(outputPath); } catch {}
 
       const filter = [
-        `fps=${profile.fps}`,
-        `scale=${profile.canvas}:${profile.canvas}:force_original_aspect_ratio=decrease:flags=lanczos`,
+        `fps=${config.media.animatedStickerFps}`,
+        `scale=${profile.canvas}:${profile.canvas}:force_original_aspect_ratio=decrease:flags=bicubic`,
         `pad=${profile.canvas}:${profile.canvas}:(ow-iw)/2:(oh-ih)/2:color=0x00000000`,
         'format=rgba',
       ].join(',');
@@ -85,8 +102,9 @@ export async function videoToAnimatedSticker(buffer: Buffer): Promise<Buffer> {
             '-an',
             '-c:v', 'libwebp_anim',
             '-lossless', '0',
-            '-compression_level', '6',
+            '-compression_level', String(config.media.animatedStickerCompressionLevel),
             '-q:v', String(profile.quality),
+            '-threads', String(config.media.ffmpegThreads),
             '-loop', '0',
             '-vf', filter,
           ])

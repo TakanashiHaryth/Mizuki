@@ -11,14 +11,13 @@ export const videoToGifHandler: CommandHandler = {
   name: 'togif',
   category: 'media',
   adminOnly: false,
-  userRateLimit: config.rateLimits.media,
   processingReaction: true,
 
   async execute(ctx: CommandContext): Promise<CommandResult> {
     const resolved = resolveVideoMedia(ctx.message, 'video');
     if (!resolved) {
       return {
-        reply: `⚠️ Hantar atau reply *video* dengan *${config.bot.prefix}togif* untuk membuat animated sticker.`,
+        reply: `⚠️ Hantar atau reply *video* dengan *${config.bot.prefix} togif* untuk membuat animated sticker.`,
         success: false,
         error: 'No video found',
       };
@@ -56,7 +55,7 @@ export const videoToGifHandler: CommandHandler = {
       return {
         reply: {
           type: 'sticker',
-          buffer: await videoToAnimatedSticker(buffer),
+          buffer: await videoToAnimatedSticker(buffer, resolved.videoMessage?.seconds ?? undefined),
           mimetype: 'image/webp',
         },
         success: true,

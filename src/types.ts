@@ -30,12 +30,14 @@ export interface CommandContext {
 
 /** A media reply (image, video, sticker, etc.) */
 export interface MediaReply {
-  type: 'image' | 'video' | 'sticker';
+  type: 'image' | 'video' | 'audio' | 'sticker';
   buffer: Buffer;
   mimetype?: string;
   caption?: string;
   /** Render an MP4 video as an auto-playing WhatsApp GIF */
   gifPlayback?: boolean;
+  /** Send audio as a normal music/audio message rather than a voice note. */
+  ptt?: boolean;
 }
 
 /** A text reply with optional WhatsApp mentions */
@@ -53,10 +55,12 @@ export interface PollReply {
   selectableCount: number;
 }
 
+export type CommandReply = string | TextReply | MediaReply | PollReply;
+
 /** The result returned by every handler's execute() */
 export interface CommandResult {
-  /** Text, media, or native poll reply */
-  reply: string | TextReply | MediaReply | PollReply;
+  /** One reply, or several media replies from a carousel post. */
+  reply: CommandReply | CommandReply[];
   /** Whether the command succeeded */
   success: boolean;
   /** Internal error message (never shown to user) */
@@ -71,6 +75,8 @@ export interface CommandHandler {
   category: CommandCategory;
   /** If true, only group admins can use this command */
   adminOnly: boolean;
+  /** Admin command also needs the bot itself to be admin (defaults to true). */
+  requiresBotAdmin?: boolean;
   /** Cooldown in seconds (omit or 0 = no cooldown) */
   cooldownSeconds?: number;
   /** Persistent per-user usage limit for expensive commands */

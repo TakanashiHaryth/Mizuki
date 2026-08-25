@@ -21,6 +21,7 @@ const DDL_STATEMENTS = [
     id INT PRIMARY KEY AUTO_INCREMENT,
     wa_group_id VARCHAR(64) UNIQUE NOT NULL,
     name VARCHAR(255),
+    personality VARCHAR(500),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   ) ENGINE=InnoDB`,
 
@@ -103,6 +104,10 @@ const INDEX_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_command_log_group ON command_usage_log(group_id, created_at)`,
 ];
 
+const SCHEMA_UPDATE_STATEMENTS = [
+  `ALTER TABLE \`groups\` ADD COLUMN personality VARCHAR(500) NULL AFTER name`,
+];
+
 async function migrate(): Promise<void> {
   const pool = getPool();
 
@@ -112,6 +117,15 @@ async function migrate(): Promise<void> {
     const tableName = sql.match(/CREATE TABLE IF NOT EXISTS [`]?(\w+)[`]?/)?.[1] || 'unknown';
     await pool.execute(sql);
     logger.info(`✓ Table "${tableName}" ready`);
+  }
+
+  for (const sql of SCHEMA_UPDATE_STATEMENTS) {
+    try {
+      await pool.execute(sql);
+      logger.info('✓ Database schema updated');
+    } catch (err: any) {
+      if (err.code !== 'ER_DUP_FIELDNAME') throw err;
+    }
   }
 
   for (const sql of INDEX_STATEMENTS) {

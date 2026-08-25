@@ -32,7 +32,7 @@ export const kickHandler: CommandHandler = {
 
     if (!targetJid) {
       return {
-        reply: `⚠️ Please mention or reply to the member you want to kick.\nUsage: *${config.bot.prefix}kick @member*`,
+        reply: `⚠️ Please mention or reply to the member you want to kick.\nUsage: *${config.bot.prefix} kick @member*`,
         success: false,
         error: 'No target specified',
       };

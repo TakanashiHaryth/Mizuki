@@ -23,7 +23,7 @@ export interface ParsedCommand {
  * Parses a message and determines if/how it was triggered.
  *
  * Trigger rules (from PRD):
- * - Message starts with the configured prefix → prefix command
+ * - Message starts with the configured prefix followed by a space → prefix command
  * - Message starts with "Mizuki" (case-insensitive) → wake-word (AI chat)
  */
 export function parseMessage(text: string): ParsedCommand {
@@ -40,9 +40,10 @@ export function parseMessage(text: string): ParsedCommand {
 
   const { prefix, wakeWord } = config.bot;
 
-  // Check the configured prefix first
-  if (trimmed.toLowerCase().startsWith(prefix.toLowerCase())) {
-    const afterPrefix = trimmed.slice(prefix.length).trim();
+  // Require a space between the prefix and command.
+  const prefixWithSpace = `${prefix} `;
+  if (trimmed.toLowerCase().startsWith(prefixWithSpace.toLowerCase())) {
+    const afterPrefix = trimmed.slice(prefixWithSpace.length).trim();
     if (!afterPrefix) return result;
 
     const parts = afterPrefix.split(/\s+/);

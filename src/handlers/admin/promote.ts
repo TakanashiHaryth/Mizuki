@@ -31,7 +31,7 @@ export const promoteHandler: CommandHandler = {
 
     if (!targetJid) {
       return {
-        reply: `⚠️ Please mention or reply to the member you want to promote.\nUsage: *${config.bot.prefix}promote @member*`,
+        reply: `⚠️ Please mention or reply to the member you want to promote.\nUsage: *${config.bot.prefix} promote @member*`,
         success: false,
         error: 'No target specified',
       };

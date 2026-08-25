@@ -10,6 +10,7 @@ export interface GroupRow {
   id: number;
   wa_group_id: string;
   name: string | null;
+  personality: string | null;
   created_at: Date;
 }
 
@@ -53,6 +54,28 @@ export async function getGroupByWaId(waGroupId: string): Promise<GroupRow | null
     [waGroupId]
   );
   return (rows[0] as GroupRow) || null;
+}
+
+/** Returns this group's custom Mizuki traits, or null for the default. */
+export async function getGroupPersonality(groupId: number): Promise<string | null> {
+  const pool = getPool();
+  const [rows] = await pool.execute<RowDataPacket[]>(
+    'SELECT personality FROM `groups` WHERE id = ?',
+    [groupId]
+  );
+  return rows[0]?.personality ?? null;
+}
+
+/** Sets custom Mizuki traits; null restores the built-in default. */
+export async function setGroupPersonality(
+  groupId: number,
+  personality: string | null
+): Promise<void> {
+  const pool = getPool();
+  await pool.execute(
+    'UPDATE `groups` SET personality = ? WHERE id = ?',
+    [personality, groupId]
+  );
 }
 
 /**
