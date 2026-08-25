@@ -1,102 +1,81 @@
 # Changelog
 
-Semua perubahan penting Mizuki akan direkodkan dalam fail ini.
+All important changes to Mizuki will be recorded in this file.
 
 ## [Unreleased]
 
 ## [1.2.0] - 2026-08-25
 
-### Ditambah
+### Added
 
-- Command admin `!m personality` untuk melihat, mengubah dan reset sifat Mizuki
-  secara berasingan bagi setiap group.
-- Perlindungan single-instance untuk mengelakkan konflik sesi WhatsApp apabila
-  dua proses Mizuki dimulakan serentak.
-- Command media `!m yt`, `!m tt`, `!m ig` dan `!m x` untuk memuat turun video
-  awam atau audio MP3 menggunakan pilihan `audio`.
-- Sokongan beberapa gambar/video dalam satu post Instagram atau X, dengan
-  alias lama `!m instagram` dikekalkan secara tersembunyi.
-- Sokongan semua gambar yang tersedia daripada TikTok photo post melalui `!m tt`, tanpa
-  mengubah laluan video HD sedia ada.
-- Fallback SocialKit pilihan untuk video/audio TikTok apabila downloader lokal
-  gagal atau disekat, menggunakan key free-tier daripada `.env`.
-- Fallback TikWM tanpa API key selepas SocialKit gagal atau kredit percuma habis,
-  termasuk sokongan video, audio dan post beberapa gambar.
+- Admin command `!m personality` to view, change and reset Mizuki's properties separately for each group.
+- Single-instance protection to prevent WhatsApp session conflicts when two Mizuki processes are started simultaneously.
+- Media commands `!m yt`, `!m tt`, `!m ig` and `!m x` to download public videos or MP3 audio using the `audio` option.
+- Support for multiple photos/videos in a single Instagram or X post, with the old `!m instagram` alias retained internally.
+- Support for all available photos from TikTok photo posts via `!m tt`, without altering the existing HD video path.
+- Optional SocialKit fallback for TikTok videos/audio when the local downloader fails or is blocked, using the free-tier key from `.env`.
+- TikWM fallback without an API key after SocialKit fails or free credits run out, including support for videos, audio and multiple image posts.
 
-### Diubah
+### Changed
 
-- Semua command kini memerlukan ruang selepas prefix, contohnya `!m help`; bentuk
-  rapat seperti `!mhelp` tidak lagi dianggap sebagai command.
-- Personaliti kini disimpan dalam MySQL dan tidak lagi dibaca daripada `.env`
-  atau `personality.md`.
-- Identiti default Mizuki ialah bot pembantu WhatsApp untuk membantu admin,
-  dengan sifat ceria, suka membantu dan periang.
-- Respons Gemini dihadkan kepada 256 output tokens secara default dan menggunakan
-  thinking mode paling ringan pada model yang menyokongnya.
-- Pemilih format MP4 kini mempunyai fallback untuk media yang tiada metadata
-  resolusi 720p, mengelakkan ralat `Requested format is not available`.
-- Conversion media tidak lagi mempunyai had penggunaan per-user. Queue terbatas
-  kekal aktif secara default dan boleh dikonfigurasi atau dimatikan melalui `.env`.
-- Animated sticker menggunakan FPS, compression level dan thread FFmpeg yang boleh
-  dikonfigurasi, dengan profil lebih ringan untuk video yang panjang.
-- Reaction proses kini digunakan pada command media sahaja.
+- All commands now require a space after the prefix, for example `!m help`; compact forms like `!mhelp` are no longer considered commands.
+- Personality is now stored in MySQL and is no longer read from `.env` or `personality.md`.
+- The default Mizuki identity is a WhatsApp assistant bot to help admins, with a cheerful, helpful and cheerful personality.
+- Gemini's response is limited to 256 output tokens by default and uses the lightest thinking mode on models that support it.
+- The MP4 format selector now has a fallback for media without 720p resolution metadata,
+  avoiding the `Requested format is not available` error.
+- Media conversion no longer has a per-user usage limit. A limited queue
+  remains active by default and can be configured or disabled via `.env`.
+- Animated stickers use configurable FFmpeg FPS, compression level and threads, with a lighter profile for long videos.
+- Reaction processing is now used for media commands only.
 
-### Dibaiki
+### Fixed
 
-- Ralat Gemini `429`, `499`, cancellation dan timeout kini memberi mesej pengguna
-  yang khusus serta tidak membiarkan command menunggu tanpa had.
-- TikTok audio yang meminta login kini diteruskan kepada fallback API.
-- Short-link TikTok mencuba kedua-dua extractor lokal sebelum API supaya link photo
-  carousel tidak tersalah dianggap sebagai video tunggal.
-- Respons carousel kosong, URL provider tidak sah, redirect dan fail kosong kini
-  ditolak dengan ralat yang jelas.
+- Gemini errors `429`, `499`, cancellation and timeout now provide specific user messages and no longer let commands wait indefinitely.
+- TikTok audio requests that require a login are now routed to the fallback API.
+- TikTok short-links now try both local extractors before the API so that carousel photo links are not mistaken for a single video.
+- Empty carousel responses, invalid provider URLs, redirects and empty files are now rejected with a clear error.
 
-### Keselamatan
+### Security
 
-- URL download diperiksa menggunakan HTTPS dan allowlist host sebelum media provider
-  dimuat turun; redirect provider disekat.
-- Respons JSON dan media pihak ketiga mempunyai had saiz, jumlah, durasi dan timeout.
-- Satu deadline dikongsi oleh keseluruhan rantai downloader supaya fallback berikutnya
-  tidak memulakan semula masa menunggu penuh.
-- Query tracking dan fragment dibuang sebelum link TikTok dihantar kepada API.
+- Download URLs are checked using HTTPS and a host allowlist before the media provider is downloaded; provider redirects are blocked.
+- JSON and third-party media responses have size, count, duration and timeout limits.
+- A single deadline is shared by the entire downloader chain so that subsequent fallbacks do not restart the full wait time.
+- Query tracking and fragments are stripped before the TikTok link is sent to the API.
 
-### Keserasian
+### Compatibility
 
-- `npm run migrate` diperlukan untuk menambah kolum `groups.personality`.
-- `personality.md`, `PERSONALITY_FILE`, `BOT_PERSONA` dan tetapan
-  `MEDIA_RATE_LIMIT_*` tidak lagi digunakan.
-- Command social memerlukan `yt-dlp`, `gallery-dl` dan `ffmpeg`; fallback TikWM tidak
-  memerlukan API key, manakala SocialKit kekal pilihan.
+- `npm run migrate` is required to add the `groups.personality` column.
+- `personality.md`, `PERSONALITY_FILE`, `BOT_PERSONA` and `MEDIA_RATE_LIMIT_*` settings are deprecated.
+- The social command requires `yt-dlp`, `gallery-dl` and `ffmpeg`; the TikWM fallback does not require an API key, while SocialKit remains optional.
 
 ## [1.1.0] - 2026-08-03
 
-### Ditambah
+### Added
 
-- Sistem backup MySQL lokal melalui `db:backup`, `db:list`, `db:verify`, `db:check`
-  dan `db:restore`.
-- Backup SQL dimampatkan sebagai `.sql.gz` dan diberikan checksum SHA-256.
-- Backup keselamatan automatik sebelum proses restore serta retention backup 30 hari.
-- Animated WhatsApp sticker WebP melalui command `!m togif`.
-- Pemampatan animated sticker adaptif sehingga berada di bawah had 500 KB.
-- Metadata `pack name` dan `author` pada sticker biasa dan animated sticker.
-- Reaction status `⏳`, `✅` dan `❌` untuk proses AI dan media.
+- Local MySQL backup system via `db:backup`, `db:list`, `db:verify`, `db:check`
+  and `db:restore`.
+- SQL backups are compressed as `.sql.gz` and given an SHA-256 checksum.
+- Automatic safety backup before the restore process and 30-day backup retention.
+- Animated WhatsApp stickers in WebP format via the `!m togif` command.
+- Adaptive compression of animated stickers to stay under the 500 KB limit.
+- `pack name` and `author` metadata for regular and animated stickers.
+- `⏳`, `✅` and `❌` status reactions for AI and media processes.
 
-### Diubah
+### Changed
 
-- `!m infobot` kini turut memaparkan uptime lengkap dalam hari, jam, minit dan saat.
-- `!m uptime` dikeluarkan daripada menu tetapi dikekalkan sebagai alias `!m infobot`.
-- Output `!m togif` ditukar daripada video MP4 dengan `gifPlayback` kepada animated
-  WebP sticker sebenar.
-- Versi bot kini dibaca terus daripada `package.json` supaya nombor versi konsisten.
+- `!m infobot` now also displays the complete uptime in days, hours, minutes, and seconds.
+- `!m uptime` has been removed from the menu but is kept as an alias for `!m infobot`.
+- `!m togif` output is converted from an MP4 video with `gifPlayback` into a real animated WebP sticker.
+- The bot version is now read directly from `package.json` so the version number is consistent.
 
-### Keselamatan
+### Security
 
-- Folder `backups/` dikecualikan daripada Git kerana dump mengandungi data pengguna.
-- Password MySQL dihantar kepada alat XAMPP melalui fail option sementara dan tidak
-  diletakkan pada command line.
-- Restore memerlukan pengesahan `--yes`; fail dengan checksum rosak akan ditolak.
+- The `backups/` folder is excluded from Git because the dumps contain user data.
+- The MySQL password is passed to the XAMPP tool via a temporary options file and not on the command line.
+- Restores now require `--yes` confirmation; files with a bad checksum will be rejected.
 
-### Keserasian
+### Compatibility
 
-- Tiada perubahan database diperlukan untuk v1.1.0.
-- Node.js 20+, MySQL/MariaDB dan ffmpeg masih diperlukan.
+- No database changes are required for v1.1.0.
+- Node.js 20+, MySQL/MariaDB and ffmpeg are still required.
