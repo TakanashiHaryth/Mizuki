@@ -44,6 +44,7 @@ import { stickerToImageHandler } from '../handlers/media/stickerToImage';
 import { imageToStickerHandler } from '../handlers/media/imageToSticker';
 import { gifToVideoHandler } from '../handlers/media/gifToVideo';
 import { videoToGifHandler } from '../handlers/media/videoToGif';
+import { statusVideoHandler } from '../handlers/media/statusVideo';
 import { youtubeDownloadHandler } from '../handlers/media/youtubeDownloader';
 import { tiktokDownloadHandler } from '../handlers/media/tiktokDownloader';
 import { instagramDownloadHandler } from '../handlers/media/instagramDownloader';
@@ -76,6 +77,7 @@ const allHandlers: CommandHandler[] = [
   imageToStickerHandler,
   gifToVideoHandler,
   videoToGifHandler,
+  statusVideoHandler,
   youtubeDownloadHandler,
   tiktokDownloadHandler,
   instagramDownloadHandler,
@@ -199,11 +201,14 @@ async function sendStatusReaction(
   msg: proto.IWebMessageInfo,
   emoji: '⏳' | '✅' | '❌'
 ): Promise<void> {
+  const key = msg.key;
+  if (!key) return;
+
   try {
-    await sock.sendMessage(jid, { react: { text: emoji, key: msg.key } });
+    await sock.sendMessage(jid, { react: { text: emoji, key } });
   } catch (err) {
     logger.warn(
-      { err, messageId: msg.key.id, group: maskJid(jid), emoji },
+      { err, messageId: key.id, group: maskJid(jid), emoji },
       'Could not send command status reaction'
     );
   }
@@ -217,12 +222,15 @@ export async function handleMessage(
   sock: WASocket,
   msg: proto.IWebMessageInfo
 ): Promise<void> {
+  const key = msg.key;
+  if (!key) return;
+
   let processingReactionStarted = false;
   try {
     // Ignore non-group messages, status broadcasts, and bot's own messages
-    const remoteJid = msg.key.remoteJid;
+    const remoteJid = key.remoteJid;
     if (!remoteJid || !remoteJid.endsWith('@g.us')) return;
-    if (msg.key.fromMe) return;
+    if (key.fromMe) return;
     if (!msg.message) return;
 
     const text = extractMessageText(msg);
@@ -232,7 +240,7 @@ export async function handleMessage(
     const parsed = parseMessage(text);
     if (!parsed.triggered) return;
 
-    const senderJid = msg.key.participant || msg.key.remoteJid || '';
+    const senderJid = key.participant || key.remoteJid || '';
     const groupJid = remoteJid;
 
     // Auto-register user and group in DB (fire-and-forget style, but await for IDs)
@@ -380,15 +388,15 @@ export async function handleMessage(
     logger.error(
       {
         err,
-        messageId: msg.key.id,
-        group: maskJid(msg.key.remoteJid),
-        sender: maskJid(msg.key.participant),
+        messageId: key.id,
+        group: maskJid(key.remoteJid),
+        sender: maskJid(key.participant),
       },
       'Unhandled error in message handler'
     );
 
     try {
-      const jid = msg.key.remoteJid;
+      const jid = key.remoteJid;
       if (jid) {
         if (processingReactionStarted) {
           await sendStatusReaction(sock, jid, msg, '❌');

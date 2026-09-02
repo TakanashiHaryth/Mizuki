@@ -12,10 +12,18 @@ const {
   resolveVideoMedia,
 } = require('../dist/media/messageResolver');
 const { MediaJobQueue, MediaQueueFullError } = require('../dist/services/mediaQueue');
+const {
+  canRemuxStatusVideo,
+  prepareStatusVideo,
+  validateStatusVideoMetadata,
+} = require('../dist/media/videoProcessor');
+const { collectMediaStreamWithLimit } = require('../dist/handlers/media/statusVideo');
 const { SingleInstanceLock } = require('../dist/services/singleInstance');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const http = require('node:http');
+const { Readable } = require('node:stream');
 const {
   DEFAULT_PERSONALITY,
   MAX_PERSONALITY_LENGTH,
@@ -38,6 +46,8 @@ const {
   LLMTimeoutError,
   classifyGeminiError,
 } = require('../dist/llm/geminiAdapter');
+const { classifyOpenRouterError } = require('../dist/llm/openRouterAdapter');
+const { createFallbackAdapter } = require('../dist/llm/aiAdapter');
 
 test('parser requires a space after the configured prefix and recognizes wake word', () => {
   const command = parseMessage(`${config.bot.prefix} poll Makan? | A | B`);
@@ -86,6 +96,18 @@ test('media resolver detects wrapped and quoted media', () => {
   };
   assert.equal(resolveVideoMedia(wrappedVideo, 'video').videoMessage.fileLength, 123);
 
+  const documentVideo = {
+    key: {},
+    message: {
+      documentMessage: {
+        mimetype: 'application/octet-stream',
+        fileName: 'status.MP4',
+        fileLength: 789,
+      },
+    },
+  };
+  assert.equal(resolveVideoMedia(documentVideo, 'video').documentMessage.fileLength, 789);
+
   const quotedImage = {
     key: {},
     message: {
@@ -118,6 +140,172 @@ test('media queue limits concurrency and rejects overflow', async () => {
   release('first');
   assert.deepEqual(await Promise.all([first, second]), ['first', 'second']);
   assert.equal(queue.active, 0);
+});
+
+test('status video preserves compatible HD MP4 and transcodes incompatible sources', () => {
+  const compatible = {
+    streams: [
+      { index: 0, codec_type: 'video', codec_name: 'h264', pix_fmt: 'yuv420p', width: 1920, height: 1080 },
+      { index: 1, codec_type: 'audio', codec_name: 'aac' },
+    ],
+    format: { format_name: 'mov,mp4,m4a,3gp,3g2,mj2', duration: 10 },
+    chapters: [],
+  };
+
+  assert.equal(canRemuxStatusVideo(compatible), true);
+  assert.equal(canRemuxStatusVideo({
+    ...compatible,
+    streams: [{ ...compatible.streams[0], codec_name: 'hevc' }],
+  }), false);
+  assert.equal(canRemuxStatusVideo({
+    ...compatible,
+    streams: [{ ...compatible.streams[0], width: 3840 }],
+  }), false);
+
+  assert.doesNotThrow(() => validateStatusVideoMetadata(compatible));
+  assert.throws(() => validateStatusVideoMetadata({
+    ...compatible,
+    streams: [{ ...compatible.streams[0], width: 8000, height: 8000 }],
+  }), /Resolusi/);
+  assert.throws(() => validateStatusVideoMetadata({
+    ...compatible,
+    streams: [{ ...compatible.streams[0], avg_frame_rate: '0/0', r_frame_rate: '240/1' }],
+  }), /120 FPS/);
+  assert.throws(() => validateStatusVideoMetadata({
+    ...compatible,
+    streams: [{ ...compatible.streams[0], duration: '301' }],
+    format: { ...compatible.format, duration: 10 },
+  }), /terlalu panjang/);
+});
+
+test('status download stream stops before buffering beyond its hard limit', async () => {
+  const allowed = await collectMediaStreamWithLimit(
+    Readable.from([Buffer.alloc(2), Buffer.alloc(3)]),
+    5
+  );
+  assert.equal(allowed.length, 5);
+
+  const oversized = Readable.from([Buffer.alloc(3), Buffer.alloc(3)]);
+  await assert.rejects(
+    () => collectMediaStreamWithLimit(oversized, 5),
+    /exceeds configured size limit/
+  );
+  assert.equal(oversized.destroyed, true);
+
+  const stalled = new Readable({ read() {} });
+  await assert.rejects(
+    () => collectMediaStreamWithLimit(stalled, 5, 10),
+    /download timed out/
+  );
+  assert.equal(stalled.destroyed, true);
+});
+
+test('status refuses indirect media input without fetching its network URL', async (t) => {
+  let requests = 0;
+  const server = http.createServer((_request, response) => {
+    requests += 1;
+    response.writeHead(200, { 'content-type': 'video/mp2t' });
+    response.end(Buffer.alloc(188));
+  });
+
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  const indirectMedia = Buffer.from([
+    'ffconcat version 1.0',
+    `file http://127.0.0.1:${address.port}/internal.ts`,
+    'duration 1',
+  ].join('\n'));
+
+  await assert.rejects(() => prepareStatusVideo(indirectMedia), /Video gagal diproses/);
+  assert.equal(requests, 0);
+});
+
+test('status command is registered as queued media processing', async () => {
+  const handler = allHandlers.find((candidate) => candidate.name === 'status');
+  assert.ok(handler);
+  assert.equal(handler.category, 'media');
+  assert.equal(handler.processingReaction, true);
+
+  const result = await handler.execute({ message: {}, args: [] });
+  assert.equal(result.success, false);
+  assert.match(result.reply, /!m status/);
+});
+
+test('PostgreSQL migration, upsert and rate-limit transaction use pg SQL', async (t) => {
+  const database = require('../dist/data/db');
+  const userRepo = require('../dist/data/repositories/userRepo');
+  const rateLimit = require('../dist/services/rateLimit');
+  const { migrate } = require('../dist/data/migrate');
+  const originalGetPool = database.getPool;
+  const originalClosePool = database.closePool;
+
+  t.after(() => {
+    database.getPool = originalGetPool;
+    database.closePool = originalClosePool;
+  });
+
+  let upsertSql = '';
+  let upsertValues;
+  database.getPool = () => ({
+    query: async (sql, values) => {
+      upsertSql = sql;
+      upsertValues = values;
+      return { rows: [{ id: 42 }], rowCount: 1 };
+    },
+  });
+
+  assert.equal(await userRepo.upsertUser('60123@s.whatsapp.net', 'Mizuki'), 42);
+  assert.match(upsertSql, /ON CONFLICT \(wa_jid\) DO UPDATE/);
+  assert.match(upsertSql, /RETURNING id/);
+  assert.doesNotMatch(upsertSql, /\?/);
+  assert.deepEqual(upsertValues, ['60123@s.whatsapp.net', 'Mizuki']);
+
+  const transactionSql = [];
+  const transactionClient = {
+    query: async (sql) => {
+      transactionSql.push(sql);
+      if (sql.includes('SELECT usage_count')) {
+        return { rows: [{ usage_count: 0, elapsed_seconds: '1' }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+  database.getPool = () => ({ connect: async () => transactionClient });
+  assert.deepEqual(
+    await rateLimit.consumeUserRateLimit(42, 'ai', 5, 180),
+    { allowed: true, remainingSeconds: 0 }
+  );
+  assert.equal(transactionSql[0], 'BEGIN');
+  assert.match(transactionSql[1], /ON CONFLICT \(user_id, action\) DO NOTHING/);
+  assert.match(transactionSql[2], /FOR UPDATE/);
+  assert.equal(transactionSql.at(-1), 'COMMIT');
+
+  const migrationSql = [];
+  const migrationClient = {
+    query: async (sql) => {
+      migrationSql.push(sql);
+      return { rows: [], rowCount: 0 };
+    },
+    release() {},
+  };
+  database.getPool = () => ({ connect: async () => migrationClient });
+  database.closePool = async () => {};
+  await migrate();
+
+  const schema = migrationSql.join('\n');
+  assert.match(schema, /GENERATED BY DEFAULT AS IDENTITY/);
+  assert.match(schema, /TIMESTAMPTZ/);
+  assert.match(schema, /CHECK \(role IN/);
+  assert.doesNotMatch(schema, /AUTO_INCREMENT|ENGINE=|ENUM\(|DATETIME|LONGTEXT|`/);
+  assert.equal(migrationSql[0], 'BEGIN');
+  assert.equal(migrationSql.at(-1), 'COMMIT');
 });
 
 test('single-instance lock blocks duplicates and releases cleanly', () => {
@@ -452,4 +640,56 @@ test('Gemini transient errors are classified for clear user feedback', () => {
 
   const ordinary = new Error('ordinary provider error');
   assert.equal(classifyGeminiError(ordinary), ordinary);
+});
+
+test('OpenRouter errors use the same provider-neutral classifications', () => {
+  assert.ok(classifyOpenRouterError({ status: 429, message: 'quota' }) instanceof LLMRateLimitError);
+  assert.ok(classifyOpenRouterError({ name: 'TimeoutError' }) instanceof LLMTimeoutError);
+});
+
+test('OpenRouter sends uncapped chat text to the free model router', async (t) => {
+  const originalFetch = global.fetch;
+  let requestBody;
+  global.fetch = async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: 'fallback answer' } }],
+    }));
+  };
+  t.after(() => { global.fetch = originalFetch; });
+
+  const { openRouterAdapter } = require('../dist/llm/openRouterAdapter');
+  const longMessage = 'x'.repeat(5000);
+  const answer = await openRouterAdapter.chat({
+    systemPrompt: 'system',
+    history: [{ role: 'assistant', content: 'history' }],
+    userMessage: longMessage,
+  });
+
+  assert.equal(answer, 'fallback answer');
+  assert.equal(requestBody.model, config.openRouter.model);
+  assert.equal(requestBody.messages.at(-1).content, longMessage);
+  assert.equal('max_tokens' in requestBody, false);
+});
+
+test('AI adapter falls back in provider order without limiting text', async () => {
+  const calls = [];
+  const adapter = createFallbackAdapter([
+    {
+      name: 'primary',
+      model: 'primary-model',
+      adapter: { chat: async () => { calls.push('primary'); throw new Error('offline'); } },
+    },
+    {
+      name: 'fallback',
+      model: 'free-model',
+      adapter: { chat: async ({ userMessage }) => { calls.push('fallback'); return userMessage; } },
+    },
+  ]);
+  const longMessage = 'x'.repeat(5000);
+
+  assert.equal(await adapter.chat({ systemPrompt: 'test', history: [], userMessage: longMessage }), longMessage);
+  assert.deepEqual(calls, ['primary', 'fallback']);
+  assert.equal('maxInputCharacters' in config.ai, false);
+  assert.equal('maxOutputTokens' in config.ai, false);
 });

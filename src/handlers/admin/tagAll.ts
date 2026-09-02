@@ -29,10 +29,10 @@ export const tagAllHandler: CommandHandler = {
       }
 
       // Build the mention list
-      const mentions = participants.map((p) => p.id);
+      const mentions = participants.map((p: any) => p.id);
       const messageText = ctx.args.length > 0
-        ? `📢 *${ctx.args.join(' ')}*\n\n` + participants.map((p) => `@${p.id.split('@')[0]}`).join(' ')
-        : '📢 *Attention everyone!*\n\n' + participants.map((p) => `@${p.id.split('@')[0]}`).join(' ');
+        ? `📢 *${ctx.args.join(' ')}*\n\n` + participants.map((p: any) => `@${p.id.split('@')[0]}`).join(' ')
+        : '📢 *Attention everyone!*\n\n' + participants.map((p: any) => `@${p.id.split('@')[0]}`).join(' ');
 
       // Send directly via socket since we need the mentions array
       await sock.sendMessage(ctx.group.waGroupId, {

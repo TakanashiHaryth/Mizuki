@@ -115,7 +115,8 @@ TIKWM_FALLBACK_ENABLED=false
 
 Gemini AI handling has been improved with:
 
-* Configurable output limits
+* Uncapped input and output text at the application level
+* Automatic OpenRouter free-model fallback when configured
 * Configurable request timeout
 * Lightweight thinking mode on supported models
 * Different messages for rate limits, cancellation, and timeout errors
@@ -127,6 +128,9 @@ Gemini AI handling has been improved with:
 
 Media processing is now more flexible:
 
+* `!m status` prepares a video or video document as an HD MP4 for forwarding to `My status`
+* Compatible H.264/AAC MP4 sources are remuxed without re-encoding
+* Status processing enforces size, duration, resolution, FPS and timeout guards and removes embedded metadata
 * No per-user limit for media conversions
 * One media job processed at a time by default
 * Bounded processing queue

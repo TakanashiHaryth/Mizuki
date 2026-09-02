@@ -40,20 +40,29 @@ export const config = {
     model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
   },
 
-  /** MySQL connection */
-  db: {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306', 10),
-    user: process.env.DB_USER || 'mizuki',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'mizuki_bot',
+  /** Free fallback through OpenRouter's rotating free-model pool */
+  openRouter: {
+    apiKey: process.env.OPENROUTER_API_KEY || '',
+    model: process.env.OPENROUTER_MODEL || 'openrouter/free',
   },
 
-  /** Local MySQL backup/restore tooling */
+  /** PostgreSQL connection (DATABASE_URL is preferred for hosted deployments). */
+  db: {
+    connectionString: process.env.DATABASE_URL?.trim() || '',
+    host: process.env.PGHOST || 'localhost',
+    port: integerFromEnv('PGPORT', 5432, 1, 65535),
+    user: process.env.PGUSER || 'mizuki',
+    password: process.env.PGPASSWORD || '',
+    database: process.env.PGDATABASE || 'mizuki_bot',
+    ssl: booleanFromEnv('DATABASE_SSL', false),
+    sslRejectUnauthorized: booleanFromEnv('DATABASE_SSL_REJECT_UNAUTHORIZED', true),
+  },
+
+  /** Local PostgreSQL backup/restore tooling */
   dbBackup: {
     directory: process.env.DB_BACKUP_DIR || 'backups',
-    retentionDays: parseInt(process.env.DB_BACKUP_RETENTION_DAYS || '30', 10),
-    mysqlBinDir: process.env.MYSQL_BIN_DIR || '',
+    retentionDays: integerFromEnv('DB_BACKUP_RETENTION_DAYS', 30, 1, 3650),
+    postgresBinDir: process.env.POSTGRES_BIN_DIR || '',
   },
 
   /** Bot behavior */
@@ -79,7 +88,7 @@ export const config = {
     tagAll: 600, // 10 minutes
   },
 
-  /** Per-user abuse limits persisted in MySQL */
+  /** Per-user abuse limits persisted in PostgreSQL */
   rateLimits: {
     ai: {
       maxUses: parseInt(process.env.AI_RATE_LIMIT_MAX || '5', 10),
@@ -104,6 +113,11 @@ export const config = {
     ),
     /** 0 lets FFmpeg choose all available threads; positive values cap threads. */
     ffmpegThreads: integerFromEnv('FFMPEG_THREADS', 0, 0, 64),
+    /** Input/output guard for HD videos prepared for WhatsApp Status. */
+    statusMaxFileSizeMB: integerFromEnv('STATUS_MAX_FILE_SIZE_MB', 64, 1, 512),
+    statusMaxDurationSeconds: integerFromEnv('STATUS_MAX_DURATION_SECONDS', 300, 1, 3600),
+    statusProcessingTimeoutMs:
+      integerFromEnv('STATUS_PROCESSING_TIMEOUT_SECONDS', 300, 10, 1800) * 1000,
     /** Disable to bypass the queue and allow media commands to run immediately. */
     queueEnabled: booleanFromEnv('MEDIA_QUEUE_ENABLED', true),
     /** Process one CPU-heavy conversion at a time; other requests wait. */
@@ -118,11 +132,8 @@ export const config = {
     author: process.env.STICKER_AUTHOR || 'Mizuki Bot',
   },
 
-  /** Maximum text sent to the AI in one request */
+  /** AI provider request behavior */
   ai: {
-    maxInputCharacters: parseInt(process.env.AI_MAX_INPUT_CHARACTERS || '4000', 10),
-    /** Short WhatsApp replies generate faster and use fewer tokens. */
-    maxOutputTokens: parseInt(process.env.AI_MAX_OUTPUT_TOKENS || '256', 10),
     /** Avoid leaving a group command waiting indefinitely on the provider. */
     timeoutMs: parseInt(process.env.AI_TIMEOUT_MS || '60000', 10),
   },

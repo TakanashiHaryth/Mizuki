@@ -7,42 +7,15 @@ import { Content, GenerateContentConfig, GoogleGenAI, ThinkingLevel } from '@goo
 import { LLMAdapter } from '../types';
 import { config } from '../config';
 import { logger } from '../services/logger';
+import { classifyProviderError, LLMRateLimitError, LLMTimeoutError } from './providerErrors';
 
 const genAI = new GoogleGenAI({ apiKey: config.gemini.apiKey });
 
-/** Lets handlers distinguish provider throttling from ordinary API failures. */
-export class LLMRateLimitError extends Error {
-  constructor() {
-    super('Gemini rate limit reached');
-    this.name = 'LLMRateLimitError';
-  }
-}
-
-/** Raised when Gemini exceeds the configured wait time or cancels the call. */
-export class LLMTimeoutError extends Error {
-  constructor() {
-    super('Gemini request timed out or was cancelled');
-    this.name = 'LLMTimeoutError';
-  }
-}
+export { LLMRateLimitError, LLMTimeoutError } from './providerErrors';
 
 /** Converts provider-specific transient statuses into stable application errors. */
 export function classifyGeminiError(err: any): Error {
-  const message = String(err?.message || err || 'Unknown Gemini error');
-  if (err?.status === 429 || err?.code === 429 || message.includes('429')) {
-    return new LLMRateLimitError();
-  }
-
-  if (
-    err?.status === 499 ||
-    err?.code === 499 ||
-    err?.name === 'AbortError' ||
-    /operation was cancelled|\bcancelled\b|\bcanceled\b|timed?\s*out/i.test(message)
-  ) {
-    return new LLMTimeoutError();
-  }
-
-  return err instanceof Error ? err : new Error(message);
+  return classifyProviderError(err);
 }
 
 export const geminiAdapter: LLMAdapter = {
@@ -55,7 +28,6 @@ export const geminiAdapter: LLMAdapter = {
 
       const generationConfig: GenerateContentConfig = {
         systemInstruction: params.systemPrompt,
-        maxOutputTokens: config.ai.maxOutputTokens,
         httpOptions: { timeout: config.ai.timeoutMs },
       };
 

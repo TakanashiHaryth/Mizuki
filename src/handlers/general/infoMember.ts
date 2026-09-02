@@ -27,7 +27,7 @@ export const infoMemberHandler: CommandHandler = {
 
     try {
       const metadata = await sock.groupMetadata(ctx.group.waGroupId);
-      const participant = metadata.participants.find((p) => p.id === targetJid);
+      const participant = metadata.participants.find((p: any) => p.id === targetJid);
 
       if (!participant) {
         return { reply: '⚠️ Member not found in this group.', success: false };

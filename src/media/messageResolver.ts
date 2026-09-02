@@ -51,7 +51,9 @@ export function resolveVideoMedia(
     const document = content.documentMessage;
     if (document) {
       const isGif = isGifDocument(document);
-      const isVideo = document.mimetype?.toLowerCase().startsWith('video/') === true;
+      const fileName = document.fileName?.toLowerCase() || '';
+      const isVideo = document.mimetype?.toLowerCase().startsWith('video/') === true ||
+        /\.(mp4|mov|mkv|webm|avi|m4v)$/.test(fileName);
       if (
         (expectedKind === 'gif' && isGif) ||
         (expectedKind === 'video' && isVideo && !isGif)

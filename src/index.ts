@@ -2,7 +2,7 @@
  * Mizuki WhatsApp Bot — Entry Point
  *
  * Bootstraps the Baileys connection, wires up event listeners for messages and
- * group participant changes, connects to MySQL, and starts the message router.
+ * group participant changes, connects to PostgreSQL, and starts the message router.
  */
 
 import makeWASocket, {
@@ -17,6 +17,7 @@ import { handleDisconnect, resetBackoff } from './connection/reconnect';
 import { handleMessage } from './router/router';
 import { testConnection } from './data/db';
 import { upsertUser } from './data/repositories/userRepo';
+import { configuredAIProviders } from './llm/aiAdapter';
 import { upsertGroup, upsertGroupMember, removeGroupMember } from './data/repositories/groupRepo';
 import { logger, maskJid } from './services/logger';
 import { config } from './config';
@@ -32,11 +33,11 @@ let sock: WASocket;
 async function startBot(): Promise<void> {
   logger.info('🚀 Starting Mizuki Bot...');
 
-  // Test DB connection first — fail fast if MySQL is down
+  // Test DB connection first — fail fast if PostgreSQL is unavailable.
   try {
     await testConnection();
   } catch (err) {
-    logger.error({ err }, 'Failed to connect to MySQL. Is the server running?');
+    logger.error({ err }, 'Failed to connect to PostgreSQL. Check DATABASE_URL or PG settings.');
     process.exit(1);
   }
 
@@ -66,7 +67,7 @@ async function startBot(): Promise<void> {
 
   // ─── Connection state events ───
 
-  sock.ev.on('connection.update', (update) => {
+  sock.ev.on('connection.update', (update: any) => {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
@@ -93,7 +94,7 @@ async function startBot(): Promise<void> {
 
   // ─── Message handling ───
 
-  sock.ev.on('messages.upsert', async (upsert) => {
+  sock.ev.on('messages.upsert', async (upsert: any) => {
     // Only process new messages (not history sync)
     if (upsert.type !== 'notify') return;
 
@@ -105,7 +106,7 @@ async function startBot(): Promise<void> {
 
   // ─── Group participant updates (auto-register members) ───
 
-  sock.ev.on('group-participants.update', async (update) => {
+  sock.ev.on('group-participants.update', async (update: any) => {
     try {
       const groupId = await upsertGroup(update.id);
 
@@ -149,7 +150,8 @@ async function startBot(): Promise<void> {
 
   logger.info(`🤖 Mizuki Bot v${config.bot.version} is ready!`);
   logger.info(`📝 Prefix: "${config.bot.prefix}" | Wake-word: "${config.bot.wakeWord}"`);
-  logger.info(`🧠 AI Model: ${config.gemini.model} | Memory window: ${config.bot.memoryWindow} exchanges`);
+  const aiModels = configuredAIProviders.map(({ name, model }) => `${name}: ${model}`).join(' -> ');
+  logger.info(`🧠 AI Model: ${aiModels || 'not configured'} | Memory window: ${config.bot.memoryWindow} exchanges`);
 }
 
 // ─── Graceful shutdown ───

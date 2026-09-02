@@ -4,6 +4,7 @@ import { CommandHandler, CommandResult, CommandContext } from '../../types';
 import { config } from '../../config';
 import { isBotAdmin } from '../../services/permission';
 import { WASocket } from '@whiskeysockets/baileys';
+import { configuredAIProviders } from '../../llm/aiAdapter';
 
 function formatUptime(totalSeconds: number): string {
   const days = Math.floor(totalSeconds / 86400);
@@ -27,6 +28,7 @@ export const infoBotHandler: CommandHandler = {
     const sock = (ctx as any).sock as WASocket;
     const botIsAdmin = await isBotAdmin(sock, ctx.group.waGroupId);
     const uptime = formatUptime(Math.floor(process.uptime()));
+    const aiModels = configuredAIProviders.map(({ name, model }) => `${name}: ${model}`).join(' → ');
 
     return {
       reply: [
@@ -34,7 +36,7 @@ export const infoBotHandler: CommandHandler = {
         '',
         `📌 Versi: ${config.bot.version}`,
         `⏱️ Uptime: ${uptime}`,
-        `🧠 Model AI: ${config.gemini.model}`,
+        `🧠 Model AI: ${aiModels || 'Belum dikonfigurasi'}`,
         `💬 Memori AI: ${config.bot.memoryWindow} pertukaran`,
         `🔧 Prefix: ${config.bot.prefix}`,
         `👑 Admin kumpulan: ${botIsAdmin ? 'Ya' : 'Tidak'}`,

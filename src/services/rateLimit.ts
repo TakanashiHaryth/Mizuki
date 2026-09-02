@@ -5,8 +5,17 @@
  */
 
 import { getPool } from '../data/db';
-import { RowDataPacket } from 'mysql2';
+import { QueryResultRow } from 'pg';
 import { logger } from './logger';
+
+interface CooldownRow extends QueryResultRow {
+  last_used_at: Date;
+}
+
+interface UserRateLimitRow extends QueryResultRow {
+  usage_count: number;
+  elapsed_seconds: number;
+}
 
 /**
  * Checks if a command is on cooldown for a group.
@@ -19,8 +28,8 @@ export async function checkCooldown(
 ): Promise<{ onCooldown: boolean; remainingSeconds: number }> {
   const pool = getPool();
 
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT last_used_at FROM rate_limits WHERE group_id = ? AND command = ?',
+  const { rows } = await pool.query<CooldownRow>(
+    'SELECT last_used_at FROM rate_limits WHERE group_id = $1 AND command = $2',
     [groupId, command]
   );
 
@@ -46,10 +55,10 @@ export async function checkCooldown(
 export async function recordUsage(groupId: number, command: string): Promise<void> {
   const pool = getPool();
 
-  await pool.execute(
+  await pool.query(
     `INSERT INTO rate_limits (group_id, command, last_used_at)
-     VALUES (?, ?, NOW())
-     ON DUPLICATE KEY UPDATE last_used_at = NOW()`,
+     VALUES ($1, $2, CURRENT_TIMESTAMP)
+     ON CONFLICT (group_id, command) DO UPDATE SET last_used_at = CURRENT_TIMESTAMP`,
     [groupId, command]
   );
 }
@@ -66,23 +75,24 @@ export async function consumeUserRateLimit(
   windowSeconds: number
 ): Promise<{ allowed: boolean; remainingSeconds: number }> {
   const pool = getPool();
-  const connection = await pool.getConnection();
+  const client = await pool.connect();
 
   try {
-    await connection.beginTransaction();
-    // Create the counter row without consuming a use. INSERT IGNORE also
+    await client.query('BEGIN');
+    // Create the counter row without consuming a use. ON CONFLICT also
     // serializes the first simultaneous requests on the unique key.
-    await connection.execute(
-      `INSERT IGNORE INTO user_rate_limits
+    await client.query(
+      `INSERT INTO user_rate_limits
          (user_id, action, window_started_at, usage_count)
-       VALUES (?, ?, NOW(), 0)`,
+       VALUES ($1, $2, CURRENT_TIMESTAMP, 0)
+       ON CONFLICT (user_id, action) DO NOTHING`,
       [userId, action]
     );
-    const [rows] = await connection.execute<RowDataPacket[]>(
+    const { rows } = await client.query<UserRateLimitRow>(
       `SELECT usage_count,
-              TIMESTAMPDIFF(SECOND, window_started_at, NOW()) AS elapsed_seconds
+              EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - window_started_at)) AS elapsed_seconds
        FROM user_rate_limits
-       WHERE user_id = ? AND action = ?
+       WHERE user_id = $1 AND action = $2
        FOR UPDATE`,
       [userId, action]
     );
@@ -91,37 +101,37 @@ export async function consumeUserRateLimit(
 
     const elapsed = Math.max(0, Number(rows[0].elapsed_seconds) || 0);
     if (elapsed >= windowSeconds) {
-      await connection.execute(
+      await client.query(
         `UPDATE user_rate_limits
-         SET window_started_at = NOW(), usage_count = 1
-         WHERE user_id = ? AND action = ?`,
+         SET window_started_at = CURRENT_TIMESTAMP, usage_count = 1
+         WHERE user_id = $1 AND action = $2`,
         [userId, action]
       );
-      await connection.commit();
+      await client.query('COMMIT');
       return { allowed: true, remainingSeconds: 0 };
     }
 
     if (Number(rows[0].usage_count) >= maxUses) {
-      await connection.commit();
+      await client.query('COMMIT');
       return {
         allowed: false,
         remainingSeconds: Math.max(1, windowSeconds - elapsed),
       };
     }
 
-    await connection.execute(
+    await client.query(
       `UPDATE user_rate_limits
        SET usage_count = usage_count + 1
-       WHERE user_id = ? AND action = ?`,
+       WHERE user_id = $1 AND action = $2`,
       [userId, action]
     );
-    await connection.commit();
+    await client.query('COMMIT');
     return { allowed: true, remainingSeconds: 0 };
   } catch (err) {
-    await connection.rollback();
+    await client.query('ROLLBACK');
     throw err;
   } finally {
-    connection.release();
+    client.release();
   }
 }
 

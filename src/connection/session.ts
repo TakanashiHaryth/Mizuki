@@ -49,7 +49,7 @@ export async function loadAuthState() {
   return {
     state: {
       ...state,
-      keys: makeCacheableSignalKeyStore(state.keys, logger as any),
+      keys: makeCacheableSignalKeyStore(state.keys, logger as any, undefined),
     },
     saveCreds: saveProtectedCreds,
   };

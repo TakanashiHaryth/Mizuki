@@ -48,7 +48,7 @@ export async function isAdmin(
   try {
     const metadata = await sock.groupMetadata(groupJid);
     const participant = metadata.participants.find(
-      (p) => participantMatches(p, [senderJid])
+      (p: any) => participantMatches(p, [senderJid])
     );
     return participant?.admin === 'admin' || participant?.admin === 'superadmin';
   } catch (err) {
@@ -74,7 +74,7 @@ export async function isBotAdmin(
 
     const metadata = await sock.groupMetadata(groupJid);
     const botParticipant = metadata.participants.find(
-      (p) => participantMatches(p, [bot.id, bot.jid, bot.lid])
+      (p: any) => participantMatches(p, [bot.id, bot.jid, bot.lid])
     );
     return botParticipant?.admin === 'admin' || botParticipant?.admin === 'superadmin';
   } catch (err) {

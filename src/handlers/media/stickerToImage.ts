@@ -30,7 +30,7 @@ export const stickerToImageHandler: CommandHandler = {
 
     try {
       const mediaMsg = { ...ctx.message, message: resolved.content };
-      const buffer = await downloadMediaMessage(mediaMsg as any, 'buffer', {}) as Buffer;
+      const buffer = await downloadMediaMessage(mediaMsg as any, 'buffer', {}, undefined) as Buffer;
       if (!validateImageSize(buffer)) {
         return { reply: '⚠️ Fail terlalu besar untuk ditukar.', success: false };
       }

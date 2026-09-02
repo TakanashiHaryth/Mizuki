@@ -1,7 +1,7 @@
 /**
  * Command: help
  * Category: general
- * Lists all available commands grouped by category.
+ * Lists all available commands grouped by category using interactive list message.
  */
 
 import { CommandHandler, CommandResult, CommandContext } from '../../types';
@@ -36,26 +36,33 @@ export const helpHandler: CommandHandler = {
 
     const categoryOrder = ['general', 'admin', 'utility', 'ai', 'minigame', 'media'];
 
-    let text = '📖 *Mizuki Commands*\n';
-    text += `_Prefix: ${config.bot.prefix} or say "Mizuki"_\n`;
+    const sections = [];
 
     for (const cat of categoryOrder) {
       const handlers = categories.get(cat);
       if (!handlers) continue;
 
       const emoji = categoryEmojis[cat] || '📌';
-      text += `\n${emoji} *${cat.charAt(0).toUpperCase() + cat.slice(1)}*\n`;
+      const rows = handlers.map((h) => ({
+        title: `${config.bot.prefix} ${h.name}${h.adminOnly ? ' 🔐' : ''}`,
+        description: h.category === 'ai' ? 'Chat with AI' : `${cat} command`,
+        rowId: `${config.bot.prefix} ${h.name}`,
+      }));
 
-      for (const h of handlers) {
-        const adminTag = h.adminOnly ? ' 🔐' : '';
-        text += `  • ${config.bot.prefix} ${h.name}${adminTag}\n`;
-      }
+      sections.push({
+        title: `${emoji} ${cat.charAt(0).toUpperCase() + cat.slice(1)}`,
+        rows,
+      });
     }
 
-    text += '\n_🔐 = Admin only_';
-    text += '\n_Say "Mizuki, [your message]" for AI chat!_';
-    text += `\n_Privasi & data: ${config.bot.prefix} privacy_`;
+    await (ctx as any).sock.sendMessage(ctx.group.waGroupId, {
+      sections,
+      buttonText: '📋 View Commands',
+      title: '📖 Mizuki Commands',
+      footer: `Prefix: ${config.bot.prefix}  |  Wake-word: "Mizuki"`,
+      text: 'Select a category to view commands',
+    }, { quoted: ctx.message });
 
-    return { reply: text, success: true };
+    return { reply: '', success: true };
   },
 };

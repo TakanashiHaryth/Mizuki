@@ -81,7 +81,7 @@ Manage WhatsApp groups through structured admin commands.
 </td>
 <td width="50%" valign="top">
 
-### 🧠 Gemini AI
+### 🧠 AI Chat
 
 Communicate with Mizuki using natural language.
 
@@ -170,7 +170,7 @@ A space between the prefix and command is required, for example `!m help`.
 | Command             | Description                           |
 | ------------------- | ------------------------------------- |
 | `Mizuki, [message]` | Talk directly to Mizuki               |
-| `!m ai [message]`    | Send a prompt to Gemini AI            |
+| `!m ai [message]`    | Send a prompt to the configured AI    |
 | `!m forgetme`        | Delete personal AI memory and opt out |
 
 ### 📊 Utility Commands
@@ -200,6 +200,7 @@ Example:
 | `!m img`     | Convert a sticker into an image          |
 | `!m tovideo` | Convert a GIF into an MP4 video          |
 | `!m togif`   | Convert a video into an animated sticker |
+| `!m status`  | Prepare a video/document video as an HD MP4 for WhatsApp Status |
 | `!m yt <link>` | Download a public YouTube video (prefers up to 720p, with a compatible fallback) |
 | `!m tt <link>` | Download a public TikTok HD video or every picture from a photo post |
 | `!m ig <link>` | Download an Instagram video or multi-picture post |
@@ -208,6 +209,11 @@ Example:
 
 `!m uptime` remains available as a backwards-compatible alias for `!m infobot`.
 Media commands react with `⏳` while processing, then `✅` or `❌`.
+
+To prepare a Status video, send or reply to a video/document video with
+`!m status`. Compatible MP4/H.264/AAC sources are remuxed without re-encoding;
+other formats are converted once to a high-quality MP4. Forward the returned
+video to `My status`. WhatsApp may still compress it during the Status upload.
 
 ---
 
@@ -218,7 +224,7 @@ Media commands react with `⏳` while processing, then `✅` or `❌`.
 ### Core Development
 
 <p>
-  <img src="https://skillicons.dev/icons?i=typescript,nodejs,mysql&theme=dark" alt="Core Technologies"/>
+  <img src="https://skillicons.dev/icons?i=typescript,nodejs,postgres&theme=dark" alt="Core Technologies"/>
 </p>
 
 ### Media and AI
@@ -237,7 +243,7 @@ Media commands react with `⏳` while processing, then `✅` or `❌`.
 | TypeScript        | Primary programming language   |
 | Node.js           | Bot runtime                    |
 | Baileys           | WhatsApp Web connection        |
-| MySQL / MariaDB   | Persistent data storage        |
+| PostgreSQL        | Persistent data storage        |
 | Google Gen AI SDK | Gemini AI integration          |
 | sharp             | Image processing               |
 | ffmpeg            | Video and GIF processing       |
@@ -252,15 +258,16 @@ Before installing Mizuki, make sure the system has:
 
 * Node.js 20 or newer
 * npm
-* MySQL 8 or MariaDB
+* PostgreSQL 14 or newer
 * ffmpeg
 * yt-dlp
 * gallery-dl
 * Git
-* A Gemini API key
+* A Gemini or OpenRouter API key
 * A dedicated WhatsApp number
 
-MySQL included with XAMPP can also be used for local development.
+PostgreSQL can run locally during development or through a managed database
+provider when Mizuki is deployed 24/7.
 
 > A dedicated WhatsApp number is strongly recommended. Do not test an unofficial WhatsApp bot using an important personal or business account.
 
@@ -366,16 +373,20 @@ Open `.env` and configure the required values:
 BOT_PREFIX=!m
 
 GEMINI_API_KEY=your_gemini_api_key
+# Optional free fallback, automatically used when Gemini fails
+OPENROUTER_API_KEY=your_openrouter_api_key
+OPENROUTER_MODEL=openrouter/free
 
-DB_HOST=localhost
-DB_PORT=3306
-DB_NAME=mizuki_bot
-DB_USER=mizuki
-DB_PASSWORD=your_strong_password
+DATABASE_URL=postgresql://mizuki:your_strong_password@localhost:5432/mizuki_bot
+# For a hosted database, paste the private PostgreSQL URL supplied by the provider.
+# DATABASE_SSL=true only if the provider requires TLS and its URL has no sslmode.
+DATABASE_SSL=false
+DATABASE_SSL_REJECT_UNAUTHORIZED=true
 
 LOG_RETENTION_DAYS=90
 
-MYSQL_BIN_DIR=C:\xampp\mysql\bin
+# Leave blank when pg_dump and psql are in PATH
+POSTGRES_BIN_DIR=
 DB_BACKUP_DIR=backups
 DB_BACKUP_RETENTION_DAYS=30
 
@@ -389,24 +400,27 @@ Keep `.env.example` inside the repository because it acts as a safe configuratio
 
 ### 4. Create the Database
 
-Log in to MySQL and run:
+Open `psql` as the local PostgreSQL administrator:
 
-```sql
-CREATE DATABASE mizuki_bot
-CHARACTER SET utf8mb4
-COLLATE utf8mb4_unicode_ci;
-
-CREATE USER 'mizuki'@'localhost'
-IDENTIFIED BY 'your_strong_password';
-
-GRANT ALL PRIVILEGES
-ON mizuki_bot.*
-TO 'mizuki'@'localhost';
-
-FLUSH PRIVILEGES;
+```powershell
+psql -U postgres
 ```
 
-Do not use the MySQL `root` account for production hosting.
+Then run:
+
+```sql
+CREATE ROLE mizuki WITH LOGIN PASSWORD 'your_strong_password';
+CREATE DATABASE mizuki_bot OWNER mizuki ENCODING 'UTF8';
+\q
+```
+
+Do not run Mizuki with the PostgreSQL `postgres` superuser. For 24/7 hosting,
+use the provider's private `DATABASE_URL`; Mizuki supports it directly. Existing
+MySQL data is not copied automatically, so keep the old database or backup until
+you have confirmed PostgreSQL works. Remove the old `DB_HOST`, `DB_PORT`,
+`DB_USER`, `DB_PASSWORD` and `DB_NAME` entries because they are no longer used.
+The 24/7 host must also keep `auth_state/` on a private persistent volume or the
+WhatsApp link will need to be scanned again after a redeploy.
 
 ### 5. Run Database Migrations
 
@@ -428,7 +442,7 @@ npm run dev
 
 ### 8. Configure Mizuki's Personality
 
-Personality is stored in MySQL for each group and can only be changed by a
+Personality is stored in PostgreSQL for each group and can only be changed by a
 group admin:
 
 ```text
@@ -469,10 +483,10 @@ The QR code does not need to be scanned again as long as:
 
 ---
 
-## 💾 MySQL Backup and Restore
+## 💾 PostgreSQL Backup and Restore
 
-Mizuki detects XAMPP MySQL tools in `C:\xampp\mysql\bin` automatically. If XAMPP
-is installed elsewhere, set `MYSQL_BIN_DIR` inside `.env`.
+Mizuki detects standard PostgreSQL installations on Windows automatically. If
+`pg_dump` and `psql` are elsewhere, set `POSTGRES_BIN_DIR` inside `.env`.
 
 ```powershell
 # Create and list compressed backups
@@ -487,8 +501,9 @@ npm run db:check
 npm run db:restore -- latest --yes
 ```
 
-Backups use `.sql.gz` with a SHA-256 checksum. Before a restore, Mizuki creates a
-`pre-restore` backup automatically. Stop the bot before restoring data.
+Backups use `.pg.sql.gz` with a SHA-256 checksum so old MySQL dumps cannot be
+selected accidentally. Before a restore, Mizuki creates a `pre-restore` backup
+automatically. Stop the bot before restoring data.
 
 The `backups/` directory contains private user data and must never be uploaded to
 GitHub or public cloud storage.
@@ -500,7 +515,7 @@ GitHub or public cloud storage.
 ```text
 Mizuki/
 ├── auth_state/              # Private WhatsApp session (ignored)
-├── backups/                # Private MySQL backups (ignored)
+├── backups/                # Private PostgreSQL backups (ignored)
 ├── dist/                   # Compiled output (ignored)
 ├── src/
 │   ├── connection/         # Baileys session and reconnect logic
@@ -510,7 +525,7 @@ Mizuki/
 │   ├── media/              # Image, video and sticker processing
 │   ├── router/             # Parser and command routing
 │   ├── services/           # Permissions, limits, logging and queues
-│   ├── tools/              # MySQL backup/restore CLI
+│   ├── tools/              # PostgreSQL backup/restore CLI
 │   ├── config.ts           # Environment configuration
 │   └── index.ts            # Application entry point
 ├── tests/                  # Automated tests
@@ -618,7 +633,13 @@ AI commands use per-user limits to reduce:
 
 * Spam
 * API abuse
-* Excessive Gemini API usage
+* Excessive AI provider usage
+
+AI input and response text have no Mizuki-level length cap. Provider context
+windows and WhatsApp message limits still apply. When both API keys are set,
+Gemini is tried first and OpenRouter's free-model router is used automatically
+if Gemini fails. This sends the current message, conversation memory and system
+instructions to OpenRouter, which may route them to a third-party free model.
 
 Media conversion commands have no per-user usage limit. By default, Mizuki
 processes one conversion at a time while later requests wait in a bounded queue.
@@ -634,6 +655,9 @@ MEDIA_QUEUE_ENABLED=true
 MEDIA_MAX_CONCURRENT=1
 MEDIA_MAX_QUEUE=8
 FFMPEG_THREADS=0
+STATUS_MAX_FILE_SIZE_MB=64
+STATUS_MAX_DURATION_SECONDS=300
+STATUS_PROCESSING_TIMEOUT_SECONDS=300
 
 # Random pacing between social downloads
 DOWNLOAD_DELAY_MIN_SECONDS=5
@@ -723,7 +747,7 @@ The developers and contributors are not responsible for account restrictions cau
 * [ ] Anti-spam protection
 * [ ] Additional minigames
 * [ ] Plugin-based command system
-* [ ] PostgreSQL support
+* [x] PostgreSQL support
 * [ ] Official WhatsApp API compatibility research
 
 ---

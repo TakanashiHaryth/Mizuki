@@ -4,10 +4,10 @@
  */
 
 import { getPool } from '../db';
-import { RowDataPacket } from 'mysql2';
+import { QueryResultRow } from 'pg';
 import { config } from '../../config';
 
-export interface MemoryRow {
+export interface MemoryRow extends QueryResultRow {
   id: number;
   user_id: number;
   group_id: number | null;
@@ -24,11 +24,11 @@ export async function loadMemory(userId: number, groupId: number): Promise<Memor
   const pool = getPool();
   const limit = config.bot.memoryWindow * 2;
 
-  const [rows] = await pool.execute<RowDataPacket[]>(
+  const { rows } = await pool.query<MemoryRow>(
     `SELECT * FROM (
        SELECT * FROM ai_memory
-       WHERE user_id = ? AND group_id = ?
-       ORDER BY created_at DESC, id DESC LIMIT ?
+       WHERE user_id = $1 AND group_id = $2
+       ORDER BY created_at DESC, id DESC LIMIT $3
      ) AS recent ORDER BY created_at ASC, id ASC`,
     [userId, groupId, limit]
   );
@@ -45,10 +45,37 @@ export async function addMemory(
   content: string
 ): Promise<void> {
   const pool = getPool();
-  await pool.execute(
-    'INSERT INTO ai_memory (user_id, group_id, role, content) VALUES (?, ?, ?, ?)',
+  await pool.query(
+    'INSERT INTO ai_memory (user_id, group_id, role, content) VALUES ($1, $2, $3, $4)',
     [userId, groupId, role, content]
   );
+}
+
+/** Stores both sides of one exchange atomically to avoid partial conversation history. */
+export async function addMemoryExchange(
+  userId: number,
+  groupId: number,
+  userMessage: string,
+  assistantMessage: string
+): Promise<void> {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO ai_memory (user_id, group_id, role, content)
+       VALUES ($1, $2, $3, $4), ($5, $6, $7, $8)`,
+      [
+        userId, groupId, 'user', userMessage,
+        userId, groupId, 'assistant', assistantMessage,
+      ]
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /**
@@ -59,20 +86,20 @@ export async function pruneMemory(userId: number, groupId: number): Promise<void
   const pool = getPool();
   const limit = config.bot.memoryWindow * 2;
 
-  // MySQL doesn't allow DELETE with LIMIT in a subquery on the same table,
-  // so we use a derived-table workaround (documented in Part 3 of the spec).
-  await pool.execute(
-    `DELETE FROM ai_memory
-     WHERE user_id = ?
-       AND group_id = ?
+  await pool.query(
+    `WITH keep AS (
+       SELECT id FROM ai_memory
+       WHERE user_id = $1 AND group_id = $2
+       ORDER BY created_at DESC, id DESC
+       LIMIT $3
+     )
+     DELETE FROM ai_memory
+     WHERE user_id = $1
+       AND group_id = $2
        AND id NOT IN (
-         SELECT id FROM (
-           SELECT id FROM ai_memory
-           WHERE user_id = ? AND group_id = ?
-           ORDER BY created_at DESC, id DESC LIMIT ?
-         ) AS keep
+         SELECT id FROM keep
        )`,
-    [userId, groupId, userId, groupId, limit]
+    [userId, groupId, limit]
   );
 }
 
@@ -81,5 +108,5 @@ export async function pruneMemory(userId: number, groupId: number): Promise<void
  */
 export async function deleteAllMemory(userId: number): Promise<void> {
   const pool = getPool();
-  await pool.execute('DELETE FROM ai_memory WHERE user_id = ?', [userId]);
+  await pool.query('DELETE FROM ai_memory WHERE user_id = $1', [userId]);
 }

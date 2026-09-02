@@ -30,7 +30,7 @@ export const imageToStickerHandler: CommandHandler = {
 
     try {
       const mediaMsg = { ...ctx.message, message: resolved.content };
-      const buffer = await downloadMediaMessage(mediaMsg as any, 'buffer', {}) as Buffer;
+      const buffer = await downloadMediaMessage(mediaMsg as any, 'buffer', {}, undefined) as Buffer;
       if (!validateImageSize(buffer)) {
         return { reply: `⚠️ Gambar terlalu besar (maksimum ${config.media.maxFileSizeMB}MB).`, success: false };
       }

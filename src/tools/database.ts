@@ -1,54 +1,70 @@
 import { spawn } from 'child_process';
-import { createHash, randomBytes } from 'crypto';
+import { createHash } from 'crypto';
 import { createReadStream, createWriteStream, promises as fs } from 'fs';
-import os from 'os';
 import path from 'path';
 import { pipeline } from 'stream/promises';
 import { createGunzip, createGzip } from 'zlib';
+import { QueryResultRow } from 'pg';
 import { config } from '../config';
+import { closePool, getPool, testConnection } from '../data/db';
 
 const backupDir = path.resolve(process.cwd(), config.dbBackup.directory);
+const expectedTables = [
+  'users',
+  'groups',
+  'group_members',
+  'admin_actions_log',
+  'command_usage_log',
+  'rate_limits',
+  'user_rate_limits',
+  'ai_memory',
+  'media_jobs',
+];
 
 function output(message: string): void {
   process.stdout.write(`${message}\n`);
 }
 
-function optionValue(value: string): string {
-  if (/\r|\n/.test(value)) throw new Error('MySQL credentials contain an invalid newline');
-  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+function postgresEnvironment(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  env.PGCONNECT_TIMEOUT ||= '10';
+
+  if (config.db.connectionString) {
+    delete env.PGHOST;
+    delete env.PGPORT;
+    delete env.PGUSER;
+    delete env.PGPASSWORD;
+    env.PGDATABASE = config.db.connectionString;
+  } else {
+    env.PGHOST = config.db.host;
+    env.PGPORT = String(config.db.port);
+    env.PGUSER = config.db.user;
+    env.PGPASSWORD = config.db.password;
+    env.PGDATABASE = config.db.database;
+  }
+  if (config.db.ssl) env.PGSSLMODE = config.db.sslRejectUnauthorized ? 'verify-full' : 'require';
+
+  return env;
 }
 
-async function withCredentials<T>(task: (optionFile: string) => Promise<T>): Promise<T> {
-  const optionFile = path.join(
-    os.tmpdir(),
-    `mizuki-mysql-${process.pid}-${randomBytes(6).toString('hex')}.cnf`
-  );
-  const contents = [
-    '[client]',
-    `host=${optionValue(config.db.host)}`,
-    `port=${config.db.port}`,
-    `user=${optionValue(config.db.user)}`,
-    `password=${optionValue(config.db.password)}`,
-    'default-character-set=utf8mb4',
-    '',
-  ].join('\n');
-
-  await fs.writeFile(optionFile, contents, { encoding: 'utf8', mode: 0o600 });
+function databaseName(): string {
+  if (!config.db.connectionString) return config.db.database;
   try {
-    return await task(optionFile);
-  } finally {
-    await fs.rm(optionFile, { force: true });
+    return decodeURIComponent(new URL(config.db.connectionString).pathname.slice(1)) || 'postgres';
+  } catch {
+    return 'postgres';
   }
 }
 
-async function findBinary(name: 'mysql' | 'mysqldump' | 'mysqlcheck'): Promise<string> {
+async function findBinary(name: 'pg_dump' | 'psql'): Promise<string> {
   const executable = process.platform === 'win32' ? `${name}.exe` : name;
   const candidates = [
-    config.dbBackup.mysqlBinDir && path.join(config.dbBackup.mysqlBinDir, executable),
-    process.env.XAMPP_ROOT && path.join(process.env.XAMPP_ROOT, 'mysql', 'bin', executable),
-    process.platform === 'win32' && path.join('C:\\xampp\\mysql\\bin', executable),
-    process.platform === 'win32' && path.join('D:\\xampp\\mysql\\bin', executable),
-    process.platform === 'win32' && path.join('E:\\xampp\\mysql\\bin', executable),
+    config.dbBackup.postgresBinDir && path.join(config.dbBackup.postgresBinDir, executable),
+    ...([19, 18, 17, 16, 15, 14].map((version) =>
+      process.platform === 'win32'
+        ? path.join(`C:\\Program Files\\PostgreSQL\\${version}\\bin`, executable)
+        : ''
+    )),
   ].filter((candidate): candidate is string => Boolean(candidate));
 
   for (const candidate of candidates) {
@@ -56,11 +72,10 @@ async function findBinary(name: 'mysql' | 'mysqldump' | 'mysqlcheck'): Promise<s
       await fs.access(candidate);
       return candidate;
     } catch {
-      // Try the next known XAMPP location.
+      // Try the next known PostgreSQL installation directory.
     }
   }
 
-  // Fall back to PATH on Linux/macOS or custom installations.
   return executable;
 }
 
@@ -94,15 +109,13 @@ function timestamp(): string {
 
 async function pruneExpiredBackups(): Promise<void> {
   const days = config.dbBackup.retentionDays;
-  if (!Number.isInteger(days) || days < 1) return;
-
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   const entries = await fs.readdir(backupDir, { withFileTypes: true });
+
   for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith('.sql.gz')) continue;
+    if (!entry.isFile() || !entry.name.endsWith('.pg.sql.gz')) continue;
     const filePath = path.join(backupDir, entry.name);
-    const stat = await fs.stat(filePath);
-    if (stat.mtimeMs >= cutoff) continue;
+    if ((await fs.stat(filePath)).mtimeMs >= cutoff) continue;
     await fs.rm(filePath, { force: true });
     await fs.rm(`${filePath}.sha256`, { force: true });
     output(`🧹 Backup lama dibuang: ${entry.name}`);
@@ -111,42 +124,40 @@ async function pruneExpiredBackups(): Promise<void> {
 
 async function createBackup(label = 'manual'): Promise<string> {
   await fs.mkdir(backupDir, { recursive: true });
-  const dumpBinary = await findBinary('mysqldump');
-  const safeDatabase = config.db.database.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const dumpBinary = await findBinary('pg_dump');
+  const safeDatabase = databaseName().replace(/[^a-zA-Z0-9_-]/g, '_');
   const safeLabel = label.replace(/[^a-zA-Z0-9_-]/g, '_');
-  const fileName = `${safeDatabase}-${safeLabel}-${timestamp()}.sql.gz`;
+  const fileName = `${safeDatabase}-${safeLabel}-${timestamp()}.pg.sql.gz`;
   const destination = path.join(backupDir, fileName);
   const partial = `${destination}.partial`;
-
-  await withCredentials(async (optionFile) => {
-    const stderr = { value: '' };
-    const child = spawn(
-      dumpBinary,
-      [
-        `--defaults-extra-file=${optionFile}`,
-        '--single-transaction',
-        '--quick',
-        '--routines',
-        '--triggers',
-        '--events',
-        '--hex-blob',
-        '--add-drop-table',
-        config.db.database,
-      ],
-      { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }
-    );
-
-    try {
-      await Promise.all([
-        pipeline(child.stdout!, createGzip({ level: 9 }), createWriteStream(partial, { flags: 'wx' })),
-        waitForExit(child, 'mysqldump', stderr),
-      ]);
-      await fs.rename(partial, destination);
-    } catch (err) {
-      await fs.rm(partial, { force: true });
-      throw err;
+  const stderr = { value: '' };
+  const child = spawn(
+    dumpBinary,
+    [
+      '--format=plain',
+      '--clean',
+      '--if-exists',
+      '--no-owner',
+      '--no-privileges',
+      '--encoding=UTF8',
+    ],
+    {
+      env: postgresEnvironment(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
     }
-  });
+  );
+
+  try {
+    await Promise.all([
+      pipeline(child.stdout!, createGzip({ level: 9 }), createWriteStream(partial, { flags: 'wx' })),
+      waitForExit(child, 'pg_dump', stderr),
+    ]);
+    await fs.rename(partial, destination);
+  } catch (err) {
+    await fs.rm(partial, { force: true });
+    throw err;
+  }
 
   const checksum = await sha256(destination);
   await fs.writeFile(`${destination}.sha256`, `${checksum}  ${fileName}\n`, 'utf8');
@@ -157,9 +168,8 @@ async function createBackup(label = 'manual'): Promise<string> {
 }
 
 async function verifyBackup(filePath: string): Promise<void> {
-  const checksumPath = `${filePath}.sha256`;
   try {
-    const expected = (await fs.readFile(checksumPath, 'utf8')).trim().split(/\s+/)[0];
+    const expected = (await fs.readFile(`${filePath}.sha256`, 'utf8')).trim().split(/\s+/)[0];
     const actual = await sha256(filePath);
     if (expected !== actual) throw new Error('Checksum backup tidak sepadan; fail mungkin rosak');
     output('✅ Checksum backup sah.');
@@ -177,7 +187,7 @@ async function latestBackup(): Promise<string> {
   const entries = await fs.readdir(backupDir, { withFileTypes: true });
   const candidates = await Promise.all(
     entries
-      .filter((entry) => entry.isFile() && /\.sql(\.gz)?$/.test(entry.name))
+      .filter((entry) => entry.isFile() && /\.pg\.sql(\.gz)?$/.test(entry.name))
       .map(async (entry) => {
         const filePath = path.join(backupDir, entry.name);
         return { filePath, modified: (await fs.stat(filePath)).mtimeMs };
@@ -188,32 +198,31 @@ async function latestBackup(): Promise<string> {
   return candidates[0].filePath;
 }
 
-async function verifyBackupCommand(args: string[]): Promise<void> {
+async function backupFromArgs(args: string[]): Promise<string> {
   const fileArg = args.find((arg) => !arg.startsWith('--')) || 'latest';
-  const filePath = fileArg.toLowerCase() === 'latest'
-    ? await latestBackup()
+  return fileArg.toLowerCase() === 'latest'
+    ? latestBackup()
     : path.resolve(process.cwd(), fileArg);
-  const stat = await fs.stat(filePath);
-  if (!stat.isFile()) throw new Error('Fail backup tidak sah');
+}
+
+async function verifyBackupCommand(args: string[]): Promise<void> {
+  const filePath = await backupFromArgs(args);
+  if (!(await fs.stat(filePath)).isFile()) throw new Error('Fail backup tidak sah');
   await verifyBackup(filePath);
   output(`✅ Backup boleh dibaca: ${filePath}`);
 }
 
 async function restoreBackup(args: string[]): Promise<void> {
   const fileArg = args.find((arg) => !arg.startsWith('--'));
-  if (!fileArg) {
-    throw new Error('Nyatakan fail atau latest: npm run db:restore -- latest --yes');
-  }
+  if (!fileArg) throw new Error('Nyatakan fail atau latest: npm run db:restore -- latest --yes');
   if (!args.includes('--yes')) {
     throw new Error('Restore boleh menggantikan data. Jalankan semula dengan --yes selepas menyemak nama database.');
   }
 
-  const filePath = fileArg.toLowerCase() === 'latest'
-    ? await latestBackup()
-    : path.resolve(process.cwd(), fileArg);
+  const filePath = await backupFromArgs([fileArg]);
   const stat = await fs.stat(filePath);
-  if (!stat.isFile() || (!filePath.endsWith('.sql') && !filePath.endsWith('.sql.gz'))) {
-    throw new Error('Backup mesti berupa fail .sql atau .sql.gz');
+  if (!stat.isFile() || (!filePath.endsWith('.pg.sql') && !filePath.endsWith('.pg.sql.gz'))) {
+    throw new Error('Backup mesti berupa fail PostgreSQL .pg.sql atau .pg.sql.gz');
   }
 
   await verifyBackup(filePath);
@@ -222,39 +231,47 @@ async function restoreBackup(args: string[]): Promise<void> {
     await createBackup('pre-restore');
   }
 
-  const mysqlBinary = await findBinary('mysql');
-  await withCredentials(async (optionFile) => {
-    const stderr = { value: '' };
-    const child = spawn(
-      mysqlBinary,
-      [`--defaults-extra-file=${optionFile}`, '--binary-mode', `--database=${config.db.database}`],
-      { stdio: ['pipe', 'ignore', 'pipe'], windowsHide: true }
-    );
-    const source = createReadStream(filePath);
-    const input = filePath.endsWith('.gz') ? source.pipe(createGunzip()) : source;
-    await Promise.all([
-      pipeline(input, child.stdin!),
-      waitForExit(child, 'mysql restore', stderr),
-    ]);
-  });
+  const psqlBinary = await findBinary('psql');
+  const stderr = { value: '' };
+  const child = spawn(
+    psqlBinary,
+    ['-X', '--set=ON_ERROR_STOP=on', '--single-transaction'],
+    {
+      env: postgresEnvironment(),
+      stdio: ['pipe', 'ignore', 'pipe'],
+      windowsHide: true,
+    }
+  );
+  const source = createReadStream(filePath);
+  const input = filePath.endsWith('.gz') ? source.pipe(createGunzip()) : source;
+  await Promise.all([
+    pipeline(input, child.stdin!),
+    waitForExit(child, 'psql restore', stderr),
+  ]);
 
-  output(`✅ Restore berjaya ke database "${config.db.database}".`);
+  output(`✅ Restore berjaya ke database "${databaseName()}".`);
   output('ℹ️ Jalankan npm run db:check untuk semakan selepas restore.');
 }
 
 async function checkDatabase(): Promise<void> {
-  const checkBinary = await findBinary('mysqlcheck');
-  await withCredentials(async (optionFile) => {
-    const stderr = { value: '' };
-    const child = spawn(
-      checkBinary,
-      [`--defaults-extra-file=${optionFile}`, '--check', '--databases', config.db.database],
-      { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }
+  try {
+    await testConnection();
+    const { rows } = await getPool().query<{ table_name: string } & QueryResultRow>(
+      `SELECT table_name
+       FROM information_schema.tables
+       WHERE table_schema = current_schema()
+         AND table_name = ANY($1::text[])`,
+      [expectedTables]
     );
-    child.stdout?.pipe(process.stdout);
-    await waitForExit(child, 'mysqlcheck', stderr);
-  });
-  output('✅ Semakan database selesai tanpa ralat.');
+    const found = new Set(rows.map((row) => row.table_name));
+    const missing = expectedTables.filter((table) => !found.has(table));
+    if (missing.length > 0) {
+      throw new Error(`Schema belum lengkap. Jalankan npm run migrate. Tiada: ${missing.join(', ')}`);
+    }
+    output(`✅ PostgreSQL tersambung dan ${expectedTables.length} jadual Mizuki tersedia.`);
+  } finally {
+    await closePool();
+  }
 }
 
 async function listBackups(): Promise<void> {
@@ -262,7 +279,7 @@ async function listBackups(): Promise<void> {
   const entries = await fs.readdir(backupDir, { withFileTypes: true });
   const backups = await Promise.all(
     entries
-      .filter((entry) => entry.isFile() && /\.sql(\.gz)?$/.test(entry.name))
+      .filter((entry) => entry.isFile() && /\.pg\.sql(\.gz)?$/.test(entry.name))
       .map(async (entry) => ({
         name: entry.name,
         stat: await fs.stat(path.join(backupDir, entry.name)),
@@ -274,7 +291,7 @@ async function listBackups(): Promise<void> {
     output(`Tiada backup dalam ${backupDir}`);
     return;
   }
-  output(`Backup untuk database "${config.db.database}":`);
+  output(`Backup untuk database "${databaseName()}":`);
   for (const backup of backups) {
     const sizeMB = (backup.stat.size / 1024 / 1024).toFixed(2);
     output(`- ${backup.name} (${sizeMB} MB, ${backup.stat.mtime.toLocaleString()})`);
@@ -308,10 +325,12 @@ async function main(): Promise<void> {
 main().catch((err) => {
   const message = err instanceof Error ? err.message : String(err);
   process.stderr.write(`❌ ${message}\n`);
-  if (/Can't connect to MySQL|ECONNREFUSED|10061/i.test(message)) {
-    process.stderr.write('💡 Buka XAMPP dan hidupkan MySQL, kemudian cuba semula.\n');
-  } else if (/Access denied/i.test(message)) {
-    process.stderr.write('💡 Semak DB_USER dan DB_PASSWORD dalam fail .env.\n');
+  if (/ECONNREFUSED|could not connect to server|timeout expired/i.test(message)) {
+    process.stderr.write('💡 Pastikan PostgreSQL hidup dan DATABASE_URL/PGHOST dalam .env betul.\n');
+  } else if (/password authentication failed|28P01/i.test(message)) {
+    process.stderr.write('💡 Semak DATABASE_URL atau PGUSER/PGPASSWORD dalam fail .env.\n');
+  } else if (/pg_dump|psql/i.test(message) && /ENOENT|not found|tidak dapat dimulakan/i.test(message)) {
+    process.stderr.write('💡 Pasang PostgreSQL client tools atau tetapkan POSTGRES_BIN_DIR dalam .env.\n');
   }
   process.exitCode = 1;
 });

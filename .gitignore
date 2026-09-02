@@ -7,3 +7,6 @@ backups/
 !.env.example
 *.log
 .mizuki.lock
+.pnp.cjs
+.pnp.loader.mjs
+yarn.lock

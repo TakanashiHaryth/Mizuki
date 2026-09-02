@@ -20,13 +20,13 @@ export const infoGroupHandler: CommandHandler = {
       const metadata = await sock.groupMetadata(ctx.group.waGroupId);
 
       const admins = metadata.participants
-        .filter((p) => p.admin === 'admin' || p.admin === 'superadmin')
-        .map((p) => `@${p.id.split('@')[0]}`)
+        .filter((p: any) => p.admin === 'admin' || p.admin === 'superadmin')
+        .map((p: any) => `@${p.id.split('@')[0]}`)
         .join(', ');
 
       const adminJids = metadata.participants
-        .filter((p) => p.admin === 'admin' || p.admin === 'superadmin')
-        .map((p) => p.id);
+        .filter((p: any) => p.admin === 'admin' || p.admin === 'superadmin')
+        .map((p: any) => p.id);
 
       const createdAt = metadata.creation
         ? new Date(metadata.creation * 1000).toLocaleDateString('en-US', {

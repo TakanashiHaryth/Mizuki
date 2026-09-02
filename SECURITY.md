@@ -135,22 +135,18 @@ For production hosting, store `auth_state/` in a private persistent volume.
 
 ## 🗄️ Database Security
 
-Use a dedicated database account instead of `root`.
+Use a dedicated PostgreSQL role instead of the `postgres` superuser.
 
 ```sql
-CREATE USER 'mizuki'@'localhost'
-IDENTIFIED BY 'your_strong_password';
-
-GRANT SELECT, INSERT, UPDATE, DELETE
-ON mizuki_bot.*
-TO 'mizuki'@'localhost';
-
-FLUSH PRIVILEGES;
+CREATE ROLE mizuki WITH LOGIN PASSWORD 'your_strong_password';
+CREATE DATABASE mizuki_bot OWNER mizuki ENCODING 'UTF8';
 ```
 
-Additional permissions may be required temporarily when running database migrations.
+The database owner can run Mizuki migrations without receiving PostgreSQL
+superuser privileges. Rotate the password immediately if `DATABASE_URL` is ever
+exposed, and use the hosting provider's private connection URL with TLS.
 
-Do not expose MySQL directly to the public internet.
+Do not expose PostgreSQL directly to the public internet.
 
 ---
 

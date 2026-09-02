@@ -4,7 +4,7 @@
  */
 
 import { getPool } from '../db';
-import { ResultSetHeader, RowDataPacket } from 'mysql2';
+import { QueryResultRow } from 'pg';
 
 /**
  * Logs an admin action (kick, promote, demote, tagall).
@@ -16,9 +16,9 @@ export async function logAdminAction(
   actionType: 'kick' | 'promote' | 'demote' | 'tagall'
 ): Promise<void> {
   const pool = getPool();
-  await pool.execute(
+  await pool.query(
     `INSERT INTO admin_actions_log (group_id, actor_user_id, target_user_id, action_type)
-     VALUES (?, ?, ?, ?)`,
+     VALUES ($1, $2, $3, $4)`,
     [groupId, actorUserId, targetUserId, actionType]
   );
 }
@@ -32,8 +32,8 @@ export async function logCommandUsage(
   command: string
 ): Promise<void> {
   const pool = getPool();
-  await pool.execute(
-    'INSERT INTO command_usage_log (group_id, user_id, command) VALUES (?, ?, ?)',
+  await pool.query(
+    'INSERT INTO command_usage_log (group_id, user_id, command) VALUES ($1, $2, $3)',
     [groupId, userId, command]
   );
 }
@@ -46,16 +46,16 @@ export async function getAdminActions(
   limit: number = 50
 ): Promise<any[]> {
   const pool = getPool();
-  const [rows] = await pool.execute<RowDataPacket[]>(
+  const { rows } = await pool.query<QueryResultRow>(
     `SELECT al.*, 
             actor.display_name AS actor_name, 
             target.display_name AS target_name
      FROM admin_actions_log al
      LEFT JOIN users actor ON al.actor_user_id = actor.id
      LEFT JOIN users target ON al.target_user_id = target.id
-     WHERE al.group_id = ?
+     WHERE al.group_id = $1
      ORDER BY al.created_at DESC
-     LIMIT ?`,
+     LIMIT $2`,
     [groupId, limit]
   );
   return rows;
@@ -66,23 +66,25 @@ export async function pruneOldLogs(retentionDays: number): Promise<number> {
   if (!Number.isInteger(retentionDays) || retentionDays < 1) return 0;
 
   const pool = getPool();
-  const connection = await pool.getConnection();
+  const client = await pool.connect();
   try {
-    await connection.beginTransaction();
-    const [commandResult] = await connection.execute<ResultSetHeader>(
-      'DELETE FROM command_usage_log WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)',
+    await client.query('BEGIN');
+    const commandResult = await client.query(
+      `DELETE FROM command_usage_log
+       WHERE created_at < CURRENT_TIMESTAMP - ($1 * INTERVAL '1 day')`,
       [retentionDays]
     );
-    const [adminResult] = await connection.execute<ResultSetHeader>(
-      'DELETE FROM admin_actions_log WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)',
+    const adminResult = await client.query(
+      `DELETE FROM admin_actions_log
+       WHERE created_at < CURRENT_TIMESTAMP - ($1 * INTERVAL '1 day')`,
       [retentionDays]
     );
-    await connection.commit();
-    return commandResult.affectedRows + adminResult.affectedRows;
+    await client.query('COMMIT');
+    return (commandResult.rowCount || 0) + (adminResult.rowCount || 0);
   } catch (err) {
-    await connection.rollback();
+    await client.query('ROLLBACK');
     throw err;
   } finally {
-    connection.release();
+    client.release();
   }
 }

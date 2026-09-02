@@ -4,9 +4,9 @@
  */
 
 import { getPool } from '../db';
-import { RowDataPacket } from 'mysql2';
+import { QueryResultRow } from 'pg';
 
-export interface GroupRow {
+export interface GroupRow extends QueryResultRow {
   id: number;
   wa_group_id: string;
   name: string | null;
@@ -14,7 +14,7 @@ export interface GroupRow {
   created_at: Date;
 }
 
-export interface GroupMemberRow {
+export interface GroupMemberRow extends QueryResultRow {
   id: number;
   group_id: number;
   user_id: number;
@@ -29,17 +29,13 @@ export interface GroupMemberRow {
 export async function upsertGroup(waGroupId: string, name?: string): Promise<number> {
   const pool = getPool();
 
-  await pool.execute(
-    `INSERT INTO \`groups\` (wa_group_id, name)
-     VALUES (?, ?)
-     ON DUPLICATE KEY UPDATE
-       name = COALESCE(VALUES(name), name)`,
+  const { rows } = await pool.query<{ id: number } & QueryResultRow>(
+    `INSERT INTO groups (wa_group_id, name)
+     VALUES ($1, $2)
+     ON CONFLICT (wa_group_id) DO UPDATE SET
+       name = COALESCE(EXCLUDED.name, groups.name)
+     RETURNING id`,
     [waGroupId, name || null]
-  );
-
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT id FROM `groups` WHERE wa_group_id = ?',
-    [waGroupId]
   );
   return rows[0].id;
 }
@@ -49,8 +45,8 @@ export async function upsertGroup(waGroupId: string, name?: string): Promise<num
  */
 export async function getGroupByWaId(waGroupId: string): Promise<GroupRow | null> {
   const pool = getPool();
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT * FROM `groups` WHERE wa_group_id = ?',
+  const { rows } = await pool.query<GroupRow>(
+    'SELECT * FROM groups WHERE wa_group_id = $1',
     [waGroupId]
   );
   return (rows[0] as GroupRow) || null;
@@ -59,8 +55,8 @@ export async function getGroupByWaId(waGroupId: string): Promise<GroupRow | null
 /** Returns this group's custom Mizuki traits, or null for the default. */
 export async function getGroupPersonality(groupId: number): Promise<string | null> {
   const pool = getPool();
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT personality FROM `groups` WHERE id = ?',
+  const { rows } = await pool.query<{ personality: string | null } & QueryResultRow>(
+    'SELECT personality FROM groups WHERE id = $1',
     [groupId]
   );
   return rows[0]?.personality ?? null;
@@ -72,8 +68,8 @@ export async function setGroupPersonality(
   personality: string | null
 ): Promise<void> {
   const pool = getPool();
-  await pool.execute(
-    'UPDATE `groups` SET personality = ? WHERE id = ?',
+  await pool.query(
+    'UPDATE groups SET personality = $1 WHERE id = $2',
     [personality, groupId]
   );
 }
@@ -88,10 +84,10 @@ export async function upsertGroupMember(
   role: 'member' | 'admin' = 'member'
 ): Promise<void> {
   const pool = getPool();
-  await pool.execute(
+  await pool.query(
     `INSERT INTO group_members (group_id, user_id, role)
-     VALUES (?, ?, ?)
-     ON DUPLICATE KEY UPDATE role = VALUES(role)`,
+     VALUES ($1, $2, $3)
+     ON CONFLICT (group_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
     [groupId, userId, role]
   );
 }
@@ -101,8 +97,8 @@ export async function upsertGroupMember(
  */
 export async function removeGroupMember(groupId: number, userId: number): Promise<void> {
   const pool = getPool();
-  await pool.execute(
-    'DELETE FROM group_members WHERE group_id = ? AND user_id = ?',
+  await pool.query(
+    'DELETE FROM group_members WHERE group_id = $1 AND user_id = $2',
     [groupId, userId]
   );
 }
@@ -112,8 +108,8 @@ export async function removeGroupMember(groupId: number, userId: number): Promis
  */
 export async function getGroupMembers(groupId: number): Promise<GroupMemberRow[]> {
   const pool = getPool();
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT * FROM group_members WHERE group_id = ?',
+  const { rows } = await pool.query<GroupMemberRow>(
+    'SELECT * FROM group_members WHERE group_id = $1',
     [groupId]
   );
   return rows as GroupMemberRow[];
@@ -127,8 +123,8 @@ export async function getGroupMember(
   userId: number
 ): Promise<GroupMemberRow | null> {
   const pool = getPool();
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT * FROM group_members WHERE group_id = ? AND user_id = ?',
+  const { rows } = await pool.query<GroupMemberRow>(
+    'SELECT * FROM group_members WHERE group_id = $1 AND user_id = $2',
     [groupId, userId]
   );
   return (rows[0] as GroupMemberRow) || null;
@@ -139,9 +135,9 @@ export async function getGroupMember(
  */
 export async function getGroupMemberCount(groupId: number): Promise<number> {
   const pool = getPool();
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT COUNT(*) as count FROM group_members WHERE group_id = ?',
+  const { rows } = await pool.query<{ count: string } & QueryResultRow>(
+    'SELECT COUNT(*) AS count FROM group_members WHERE group_id = $1',
     [groupId]
   );
-  return rows[0].count;
+  return Number(rows[0].count);
 }

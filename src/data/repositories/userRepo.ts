@@ -4,9 +4,9 @@
  */
 
 import { getPool } from '../db';
-import { ResultSetHeader, RowDataPacket } from 'mysql2';
+import { QueryResultRow } from 'pg';
 
-export interface UserRow {
+export interface UserRow extends QueryResultRow {
   id: number;
   wa_jid: string;
   display_name: string | null;
@@ -22,18 +22,14 @@ export interface UserRow {
 export async function upsertUser(waJid: string, displayName?: string): Promise<number> {
   const pool = getPool();
 
-  await pool.execute(
+  const { rows } = await pool.query<{ id: number } & QueryResultRow>(
     `INSERT INTO users (wa_jid, display_name, last_seen)
-     VALUES (?, ?, NOW())
-     ON DUPLICATE KEY UPDATE
-       display_name = COALESCE(VALUES(display_name), display_name),
-       last_seen = NOW()`,
+     VALUES ($1, $2, CURRENT_TIMESTAMP)
+     ON CONFLICT (wa_jid) DO UPDATE SET
+       display_name = COALESCE(EXCLUDED.display_name, users.display_name),
+       last_seen = CURRENT_TIMESTAMP
+     RETURNING id`,
     [waJid, displayName || null]
-  );
-
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT id FROM users WHERE wa_jid = ?',
-    [waJid]
   );
   return rows[0].id;
 }
@@ -43,8 +39,8 @@ export async function upsertUser(waJid: string, displayName?: string): Promise<n
  */
 export async function getUserByJid(waJid: string): Promise<UserRow | null> {
   const pool = getPool();
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT * FROM users WHERE wa_jid = ?',
+  const { rows } = await pool.query<UserRow>(
+    'SELECT * FROM users WHERE wa_jid = $1',
     [waJid]
   );
   return (rows[0] as UserRow) || null;
@@ -55,8 +51,8 @@ export async function getUserByJid(waJid: string): Promise<UserRow | null> {
  */
 export async function getUserById(id: number): Promise<UserRow | null> {
   const pool = getPool();
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT * FROM users WHERE id = ?',
+  const { rows } = await pool.query<UserRow>(
+    'SELECT * FROM users WHERE id = $1',
     [id]
   );
   return (rows[0] as UserRow) || null;
@@ -67,7 +63,7 @@ export async function getUserById(id: number): Promise<UserRow | null> {
  */
 export async function setMemoryOptOut(userId: number, optOut: boolean): Promise<void> {
   const pool = getPool();
-  await pool.execute('UPDATE users SET memory_opt_out = ? WHERE id = ?', [optOut, userId]);
+  await pool.query('UPDATE users SET memory_opt_out = $1 WHERE id = $2', [optOut, userId]);
 }
 
 /**
@@ -75,9 +71,9 @@ export async function setMemoryOptOut(userId: number, optOut: boolean): Promise<
  */
 export async function isMemoryOptedOut(userId: number): Promise<boolean> {
   const pool = getPool();
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    'SELECT memory_opt_out FROM users WHERE id = ?',
+  const { rows } = await pool.query<{ memory_opt_out: boolean } & QueryResultRow>(
+    'SELECT memory_opt_out FROM users WHERE id = $1',
     [userId]
   );
-  return rows[0]?.memory_opt_out === 1;
+  return rows[0]?.memory_opt_out === true;
 }
